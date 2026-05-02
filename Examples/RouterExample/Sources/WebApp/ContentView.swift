@@ -3,6 +3,14 @@ import ElementaryUI
 
 @Routes
 struct AppRoutes {
+  @Layout("/:lang")
+  static func languageLayout<Content: View>(
+    lang: String,
+    outlet: Outlet<Content>
+  ) -> LanguageLayout<Content> {
+    LanguageLayout(lang: lang, outlet: outlet)
+  }
+
   @Route("/")
   static func home() -> HomePage {
     HomePage()
@@ -69,6 +77,21 @@ struct ContentView {
           }
         }
       }
+    }
+  }
+}
+
+@View
+struct LanguageLayout<Content: View> {
+  let lang: String
+  let outlet: Outlet<Content>
+
+  var body: some View {
+    div(.style(layoutStyle)) {
+      p(.style(textStyle)) {
+        "Language: \(lang)"
+      }
+      outlet
     }
   }
 }
@@ -212,4 +235,9 @@ let detailsStyle = [
   "grid-template-columns": "120px 1fr",
   "gap": "8px 16px",
   "margin": "0",
+]
+
+let layoutStyle = [
+  "display": "grid",
+  "gap": "12px",
 ]

@@ -31,6 +31,31 @@ struct MacroRoutes {
   }
 }
 
+@View
+struct MacroLayout<Content: View> {
+  let teamID: Int
+  let outlet: Outlet<Content>
+
+  var body: some View {
+    outlet
+  }
+}
+
+@Routes
+struct MacroLayoutRoutes {
+  @Layout("/teams/:teamID")
+  static func teamLayout<Content: View>(teamID: Int, outlet: Outlet<Content>) -> MacroLayout<
+    Content
+  > {
+    MacroLayout(teamID: teamID, outlet: outlet)
+  }
+
+  @Route("/teams/:teamID/members/:memberID")
+  static func member(teamID: Int, memberID: Int) -> EmptyHTML {
+    EmptyHTML()
+  }
+}
+
 @Test func routesMacroGeneratesRouteSetAndTypedRouteView() throws {
   let routeSet = try MacroRoutes.routes()
   let router = Router(routes: routeSet.tree, history: MemoryHistory(initialPath: "/users/42"))
@@ -42,6 +67,21 @@ struct MacroRoutes {
   #expect(
     try routeSet.fileHref(splat: "docs/readme", hash: "install") == "/files/docs/readme#install"
   )
+}
+
+@Test func routesMacroComposesLayoutRoutes() throws {
+  let routeSet = try MacroLayoutRoutes.routes()
+  let router = Router(
+    routes: routeSet.tree,
+    history: MemoryHistory(initialPath: "/teams/7/members/42")
+  )
+
+  #expect(router.matches.map(\.route) == [routeSet.handles.teamLayout, routeSet.handles.member])
+  #expect(router.currentMatch?.params.get("teamID") == "7")
+  #expect(router.currentMatch?.params.get("memberID") == "42")
+  #expect(try routeSet.memberHref(teamID: 7, memberID: 42) == "/teams/7/members/42")
+
+  _ = try router.renderCurrentRoute()
 }
 
 @Test func routeParametersExtractsStringsAndTypedValues() throws {

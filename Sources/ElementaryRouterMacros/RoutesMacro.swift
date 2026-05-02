@@ -20,6 +20,7 @@ public enum RoutesMacro: MemberMacro {
     let containerName = structDeclaration.name.text
     let access = declaration.accessModifier
     var routes: [RouteDeclaration] = []
+    var layouts: [RouteDeclaration] = []
     var notFound: FunctionDeclSyntax?
     var routeError: FunctionDeclSyntax?
     var seenPaths: [String] = []
@@ -28,6 +29,7 @@ public enum RoutesMacro: MemberMacro {
       guard let function = member.decl.as(FunctionDeclSyntax.self) else {
         let text = member.decl.trimmedDescription
         if text.contains("@Route")
+          || text.contains("@Layout")
           || text.contains("@NotFound")
           || text.contains("@RouteError")
         {
@@ -66,6 +68,41 @@ public enum RoutesMacro: MemberMacro {
         }
         seenPaths.append(route.normalizedPath)
         routes.append(route)
+      }
+
+      if function.hasAttribute(named: "Layout") {
+        guard function.isStatic else {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
+          )
+          continue
+        }
+
+        guard let path = function.stringLiteralArgument(forAttributeNamed: "Layout") else {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStringLiteral)
+          )
+          continue
+        }
+
+        let layout = RouteDeclaration(function: function, path: path)
+        validate(route: layout, context: context)
+        if !layout.parameters.contains(where: { $0.kind == .outlet }) {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.layoutRequiresOutlet)
+          )
+        }
+
+        if seenPaths.contains(layout.normalizedPath) {
+          context.diagnose(
+            .init(
+              node: Syntax(function),
+              message: RoutesDiagnostic.duplicateRoute(path: layout.normalizedPath)
+            )
+          )
+        }
+        seenPaths.append(layout.normalizedPath)
+        layouts.append(layout)
       }
 
       if function.hasAttribute(named: "NotFound") {
@@ -107,16 +144,22 @@ public enum RoutesMacro: MemberMacro {
           access: access,
           containerName: containerName,
           routes: routes,
+          layouts: layouts,
           notFound: notFound,
           routeError: routeError
         )
       ),
-      DeclSyntax(stringLiteral: handlesDeclaration(access: access, routes: routes)),
-      DeclSyntax(stringLiteral: routeSetDeclaration(access: access, routes: routes)),
+      DeclSyntax(
+        stringLiteral: handlesDeclaration(access: access, routes: routes, layouts: layouts)
+      ),
+      DeclSyntax(
+        stringLiteral: routeSetDeclaration(access: access, routes: routes, layouts: layouts)
+      ),
       DeclSyntax(
         stringLiteral: routesFunctionDeclaration(
           access: access,
           routes: routes,
+          layouts: layouts,
           notFound: notFound,
           routeError: routeError
         )
@@ -138,7 +181,7 @@ private struct RouteDeclaration {
   }
 
   var storageParameters: [RouteParameter] {
-    parameters.filter { $0.kind != .context }
+    parameters.filter { $0.kind != .context && $0.kind != .outlet }
   }
 
   var pathStorageParameters: [RouteParameter] {
@@ -157,6 +200,10 @@ private struct RouteDeclaration {
     RoutePath(path).hasWildcard
   }
 
+  var depth: Int {
+    RoutePath(path).segments.count
+  }
+
   var normalizedPath: String {
     RoutePath(path).normalized
   }
@@ -168,6 +215,7 @@ private struct RouteParameter {
     case query
     case wildcard
     case context
+    case outlet
   }
 
   let label: String
@@ -183,6 +231,9 @@ private struct RouteParameter {
   var kind: Kind {
     if type == "RouteContext" {
       return .context
+    }
+    if type == "Outlet" || type.hasPrefix("Outlet<") || label == "outlet" {
+      return .outlet
     }
     if type == "Wildcard" {
       return .wildcard
@@ -214,6 +265,8 @@ private struct RouteParameter {
     switch kind {
     case .context:
       return "\(label): context"
+    case .outlet:
+      return "\(label): outlet"
     case .wildcard:
       return "\(label): Wildcard(\(label))"
     case .query:
@@ -254,6 +307,10 @@ private struct RoutePath {
 
   var hasWildcard: Bool {
     value.split(separator: "/").contains("*")
+  }
+
+  var segments: [String] {
+    value.split(separator: "/").map(String.init)
   }
 
   var normalized: String {
@@ -303,13 +360,48 @@ private func validate(route: RouteDeclaration, context: some MacroExpansionConte
   }
 }
 
+private func matchingLayouts(for route: RouteDeclaration, layouts: [RouteDeclaration])
+  -> [RouteDeclaration]
+{
+  layouts
+    .filter { layout in
+      route.normalizedPath == layout.normalizedPath
+        || route.normalizedPath.hasPrefix(layout.normalizedPath + "/")
+    }
+    .sorted { $0.depth < $1.depth }
+}
+
+private func relativePath(for route: RouteDeclaration, under layout: RouteDeclaration?) -> String {
+  guard let layout else {
+    return route.path
+  }
+
+  if route.normalizedPath == layout.normalizedPath {
+    return "/"
+  }
+
+  var relative = route.normalizedPath
+  relative.removeFirst(layout.normalizedPath.count)
+  if relative.first == "/" {
+    relative.removeFirst()
+  }
+  return relative.isEmpty ? "/" : relative
+}
+
 private func routeViewDeclaration(
   access: String,
   containerName: String,
   routes: [RouteDeclaration],
+  layouts: [RouteDeclaration],
   notFound: FunctionDeclSyntax?,
   routeError: FunctionDeclSyntax?
 ) -> String {
+  let layoutCases = layouts.map { layout in
+    let values = layout.storageParameters.map { "\($0.label): \($0.storageType)" }
+      .joined(separator: ", ")
+    return values.isEmpty ? "case \(layout.name)" : "case \(layout.name)(\(values))"
+  }
+
   let cases = routes.map { route in
     let values = route.storageParameters.map { "\($0.label): \($0.storageType)" }
       .joined(separator: ", ")
@@ -319,20 +411,45 @@ private func routeViewDeclaration(
   let notFoundCase = notFound == nil ? [] : ["case notFound(RouteNotFoundContext)"]
   let errorCase = routeError == nil ? [] : ["case routeError(RouteErrorContext)"]
 
-  let switchCases = routes.map { route in
-    let parameters = route.storageParameters
+  let layoutSwitchCases = layouts.map { layout in
+    let expression = layoutCallExpression(
+      containerName: containerName,
+      layout: layout,
+      outletExpression: "EmptyHTML()"
+    )
+    let parameters = layout.storageParameters
     if parameters.isEmpty {
       return """
-              case .\(route.name):
-                \(containerName).\(route.name)()
+              case .\(layout.name):
+                \(expression)
         """
     }
 
     let bindings = parameters.map { "let \($0.label)" }.joined(separator: ", ")
-    let arguments = parameters.map(\.callArgument).joined(separator: ", ")
+    return """
+            case .\(layout.name)(\(bindings)):
+              \(expression)
+      """
+  }
+
+  let switchCases = routes.map { route in
+    let parameters = route.storageParameters
+    let contentExpression = wrappedRouteExpression(
+      containerName: containerName,
+      route: route,
+      layouts: layouts
+    )
+    if parameters.isEmpty {
+      return """
+              case .\(route.name):
+                \(contentExpression)
+        """
+    }
+
+    let bindings = parameters.map { "let \($0.label)" }.joined(separator: ", ")
     return """
             case .\(route.name)(\(bindings)):
-              \(containerName).\(route.name)(\(arguments))
+              \(contentExpression)
       """
   }
 
@@ -354,7 +471,7 @@ private func routeViewDeclaration(
       @View
       \(access)struct RouteView {
         \(access)enum Storage {
-          \((cases + notFoundCase + errorCase).joined(separator: "\n    "))
+          \((layoutCases + cases + notFoundCase + errorCase).joined(separator: "\n    "))
         }
 
         let storage: Storage
@@ -365,17 +482,60 @@ private func routeViewDeclaration(
 
         \(access)var body: some View {
           switch storage {
-          \((switchCases + [notFoundSwitch, errorSwitch].compactMap { $0 }).joined(separator: "\n"))
+          \((layoutSwitchCases + switchCases + [notFoundSwitch, errorSwitch].compactMap { $0 }).joined(separator: "\n"))
           }
         }
       }
     """
 }
 
-private func handlesDeclaration(access: String, routes: [RouteDeclaration]) -> String {
-  let properties = routes.map { "\(access)let \($0.name): RouteHandle" }.joined(separator: "\n    ")
-  let arguments = routes.map { "\($0.name): RouteHandle" }.joined(separator: ", ")
-  let assignments = routes.map { "self.\($0.name) = \($0.name)" }.joined(separator: "\n      ")
+private func wrappedRouteExpression(
+  containerName: String,
+  route: RouteDeclaration,
+  layouts: [RouteDeclaration]
+) -> String {
+  let arguments = route.storageParameters.map(\.callArgument).joined(separator: ", ")
+  var expression =
+    route.storageParameters.isEmpty
+    ? "\(containerName).\(route.name)()"
+    : "\(containerName).\(route.name)(\(arguments))"
+
+  for layout in matchingLayouts(for: route, layouts: layouts).reversed() {
+    expression = layoutCallExpression(
+      containerName: containerName,
+      layout: layout,
+      outletExpression: expression
+    )
+  }
+
+  return expression
+}
+
+private func layoutCallExpression(
+  containerName: String,
+  layout: RouteDeclaration,
+  outletExpression: String
+) -> String {
+  let arguments = layout.parameters.map { parameter in
+    if parameter.kind == .outlet {
+      return "\(parameter.label): Outlet(\(outletExpression))"
+    }
+    return parameter.callArgument
+  }.joined(separator: ", ")
+  return "\(containerName).\(layout.name)(\(arguments))"
+}
+
+private func handlesDeclaration(
+  access: String,
+  routes: [RouteDeclaration],
+  layouts: [RouteDeclaration]
+) -> String {
+  let allRoutes = layouts + routes
+  let properties = allRoutes.map { "\(access)let \($0.name): RouteHandle" }.joined(
+    separator: "\n    "
+  )
+  let arguments = allRoutes.map { "\($0.name): RouteHandle" }.joined(separator: ", ")
+  let assignments = allRoutes.map { "self.\($0.name) = \($0.name)" }.joined(separator: "\n      ")
 
   return """
       \(access)struct Handles {
@@ -388,10 +548,13 @@ private func handlesDeclaration(access: String, routes: [RouteDeclaration]) -> S
     """
 }
 
-private func routeSetDeclaration(access: String, routes: [RouteDeclaration]) -> String {
-  let hrefs = routes.map { hrefFunctionDeclaration(access: access, route: $0) }.joined(
-    separator: "\n\n"
-  )
+private func routeSetDeclaration(
+  access: String,
+  routes: [RouteDeclaration],
+  layouts: [RouteDeclaration]
+) -> String {
+  let hrefs = (layouts + routes).map { hrefFunctionDeclaration(access: access, route: $0) }
+    .joined(separator: "\n\n")
 
   return """
       \(access)struct RouteSet {
@@ -411,11 +574,15 @@ private func routeSetDeclaration(access: String, routes: [RouteDeclaration]) -> 
 private func routesFunctionDeclaration(
   access: String,
   routes: [RouteDeclaration],
+  layouts: [RouteDeclaration],
   notFound: FunctionDeclSyntax?,
   routeError: FunctionDeclSyntax?
 ) -> String {
+  let layoutRegistrations = layouts.map { layout in
+    routeRegistration(layout, parent: nil)
+  }
   let registrations = routes.map { route in
-    routeRegistration(route)
+    routeRegistration(route, parent: matchingLayouts(for: route, layouts: layouts).last)
   }
 
   let notFoundRegistration = notFound.map { function in
@@ -434,11 +601,12 @@ private func routesFunctionDeclaration(
     """
   }
 
-  let handles = routes.map { "\($0.name): \($0.name)" }.joined(separator: ", ")
+  let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
 
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
         let collection = RouteCollection<RouteView>()
+        \(layoutRegistrations.joined(separator: "\n"))
         \(registrations.joined(separator: "\n"))
         \([notFoundRegistration, errorRegistration].compactMap { $0 }.joined(separator: "\n"))
         return RouteSet(
@@ -449,11 +617,13 @@ private func routesFunctionDeclaration(
     """
 }
 
-private func routeRegistration(_ route: RouteDeclaration) -> String {
+private func routeRegistration(_ route: RouteDeclaration, parent: RouteDeclaration?) -> String {
   let storageArguments = route.storageParameters.map { parameter in
     switch parameter.kind {
     case .context:
       return "\(parameter.label): context"
+    case .outlet:
+      return "\(parameter.label): Outlet(EmptyHTML())"
     case .wildcard:
       return "\(parameter.label): try context.params.require(\"*\", String.self)"
     case .query:
@@ -470,19 +640,26 @@ private func routeRegistration(_ route: RouteDeclaration) -> String {
     }
   }.joined(separator: ", ")
 
-  if route.parameters.isEmpty {
+  if route.storageParameters.isEmpty {
     return """
-          let \(route.name) = collection.route("\(route.path)") {
+          let \(route.name) = \(registrationTarget(parent: parent)).route("\(relativePath(for: route, under: parent))") {
             RouteView(storage: .\(route.name))
           }
       """
   }
 
   return """
-        let \(route.name) = collection.route("\(route.path)") { context throws(RouteValueError) in
+        let \(route.name) = \(registrationTarget(parent: parent)).route("\(relativePath(for: route, under: parent))") { context throws(RouteValueError) in
           RouteView(storage: .\(route.name)(\(storageArguments)))
         }
     """
+}
+
+private func registrationTarget(parent: RouteDeclaration?) -> String {
+  guard let parent else {
+    return "collection"
+  }
+  return "collection.children(of: \(parent.name))"
 }
 
 private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) -> String {
@@ -601,6 +778,7 @@ private enum RoutesDiagnostic: DiagnosticMessage {
   case extraPathParameter(name: String)
   case wildcardRequiresParameter
   case unexpectedWildcardParameter
+  case layoutRequiresOutlet
   case duplicateRoute(path: String)
   case duplicateNotFound
   case duplicateRouteError
@@ -621,6 +799,8 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "Wildcard routes must declare exactly one `Wildcard` parameter."
     case .unexpectedWildcardParameter:
       "`Wildcard` parameters are only valid on routes whose path contains `*`."
+    case .layoutRequiresOutlet:
+      "`@Layout` functions must declare an outlet parameter."
     case .duplicateRoute(let path):
       "Duplicate route path `\(path)`."
     case .duplicateNotFound:
