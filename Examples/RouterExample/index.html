@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Elementary Demo</title>
+    <title>ElementaryRouter Example</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
@@ -11,6 +11,32 @@
     </style>
   </head>
   <body>
+    <script>
+      document.addEventListener(
+        "click",
+        (event) => {
+          const target =
+            event.target instanceof Element ? event.target : event.target?.parentElement;
+          const anchor = target?.closest("a[data-router-link]");
+          if (!anchor || event.defaultPrevented) return;
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          ) {
+            return;
+          }
+          if (anchor.target && anchor.target !== "_self") return;
+          if (anchor.hasAttribute("download")) return;
+          if (new URL(anchor.href, location.href).origin !== location.origin) return;
+
+          event.preventDefault();
+        },
+        true,
+      );
+    </script>
     <script type="module" src="./index.ts"></script>
   </body>
 </html>

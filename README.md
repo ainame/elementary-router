@@ -2,9 +2,33 @@
 
 `ElementaryRouter` is a URL state router for ElementaryUI on Swift/WASM.
 
-The preferred API is macro-based. `@Routes` generates a single typed route view, route handles, href helpers, and the `RouteTree` used by `Router`.
+The 0.0.1 API is macro-based. `@Routes` generates a single typed route view,
+route handles, href helpers, and the `RouteTree` used by `Router`. This keeps
+route rendering on upstream ElementaryUI without a vendored `AnyView` or runtime
+type-erased view layer.
+
+## Installation
+
+Add the package to `Package.swift`:
 
 ```swift
+.package(url: "https://github.com/ainame/elementary-router", exact: "0.0.1")
+```
+
+Then depend on the library product:
+
+```swift
+.product(name: "ElementaryRouter", package: "elementary-router")
+```
+
+## Basic Usage
+
+Define routes with `@Routes`:
+
+```swift
+import ElementaryRouter
+import ElementaryUI
+
 @Routes
 struct AppRoutes {
   @Layout("/:lang")
@@ -46,7 +70,7 @@ struct AppRoutes {
 }
 ```
 
-Use the generated route set to create the router:
+Create a router from the generated route set:
 
 ```swift
 let routeSet = try AppRoutes.routes()
@@ -59,7 +83,9 @@ Render the current route with the generated typed route view:
 RouterProvider(router) {
   RouterView(router) { _ in
     AppRoutes.RouteView(
-      storage: .notFound(RouteNotFoundContext(location: router.location, query: RouteParameters()))
+      storage: .notFound(
+        RouteNotFoundContext(location: router.location, query: RouteParameters())
+      )
     )
   }
 }
@@ -79,27 +105,87 @@ Link(
 let href = try routeSet.profileHref(lang: "ja", profileId: 42, tab: "posts")
 ```
 
-`Link` preserves native browser behavior for modifier clicks and non-self targets. Full client-side interception still needs ElementaryUI to expose `MouseEvent.preventDefault()` or an equivalent cancellable event API.
+## Routing Model
 
-## Known Link Interception Blocker
+- `Router.matches` is the parent-to-leaf match stack.
+- `Router.currentMatch` is a leaf convenience.
+- `@Layout` composes nested route UI through `Outlet<Content>`.
+- `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
+- `RouteParameters` is used for both path params and query params.
+- `Query<T>` maps query values into typed route function parameters.
+- `Wildcard` maps `*` routes into a typed route function parameter.
 
-ElementaryUI currently exposes mouse button and modifier-key state, but not a public way to call `preventDefault()` from Swift. Until that exists, `Link` can call router navigation for eligible clicks but cannot stop the browser's native anchor navigation by itself.
+## Link Interception Status
 
-For an app-level workaround, add a capture-phase script to the host HTML and mark router anchors, for example with `data-router-link`:
+`Link` emits a normal anchor with `href` and `data-router-link="true"`, then
+uses ElementaryUI's Swift `onClick` handler to call router navigation only for
+eligible clicks:
+
+- left button
+- no modifier keys
+- no non-self target
+
+Modifier clicks, middle clicks, and `_blank` targets stay native browser
+behavior.
+
+One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
+mouse button and modifier-key state, but not a public way to call
+`preventDefault()` from Swift. Until that exists, apps that want full
+client-side navigation interception should add a capture-phase script to the
+host HTML:
 
 ```html
 <script>
-document.addEventListener("click", event => {
-  const anchor = event.target.closest("a[data-router-link]");
-  if (!anchor || event.defaultPrevented) return;
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-  if (anchor.target && anchor.target !== "_self") return;
-  if (anchor.hasAttribute("download")) return;
-  if (new URL(anchor.href, location.href).origin !== location.origin) return;
+document.addEventListener(
+  "click",
+  (event) => {
+    const target =
+      event.target instanceof Element ? event.target : event.target?.parentElement;
+    const anchor = target?.closest("a[data-router-link]");
+    if (!anchor || event.defaultPrevented) return;
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    if (anchor.target && anchor.target !== "_self") return;
+    if (anchor.hasAttribute("download")) return;
+    if (new URL(anchor.href, location.href).origin !== location.origin) return;
 
-  event.preventDefault();
-}, true);
+    event.preventDefault();
+  },
+  true,
+);
 </script>
 ```
 
-This is a workaround for controlled apps, not the final library contract. The preferred fix is for ElementaryUI to expose `MouseEvent.preventDefault()` or an equivalent cancellable event handler.
+This is an app-level workaround for 0.0.1, not the final library contract. The
+preferred fix is for ElementaryUI to expose `MouseEvent.preventDefault()` or an
+equivalent cancellable event handler.
+
+## Current Scope
+
+In scope for 0.0.1:
+
+- typed route registration with `@Routes`
+- path params, wildcard params, and typed query params
+- nested typed layouts with `@Layout` and `Outlet<Content>`
+- browser, hash, and memory history adapters
+- route handles, href helpers, active matching, not-found, and route-error fallback rendering
+
+Out of scope for 0.0.1:
+
+- form actions and non-GET mutations
+- server functions
+- SSR and hydration
+- loader caching
+- runtime `AnyView` route rendering
+
+## Example
+
+See [Examples/RouterExample](Examples/RouterExample) for a Vite + Swift/WASM app
+using the local package.

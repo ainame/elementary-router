@@ -1,5 +1,9 @@
 # RouterView / AnyView 実験の学び
 
+この文書は 0.0.1 前の設計検討メモ。ここで触れている `vendor/elementary-ui`
+spike は削除済みで、現在の実装は upstream ElementaryUI と `@Routes` が生成する
+typed route view を使う。
+
 ## 背景
 
 `RouterView` を本当に描画できるようにするには、URL に応じて異なる concrete `View` を実行時に切り替える必要がある。
@@ -46,7 +50,7 @@ public struct AnyView: View {
 
 ## 今回の vendor spike で確認できたこと
 
-`vendor/elementary-ui` を submodule として追加し、実験用 `AnyView` を実装した。
+当時は `vendor/elementary-ui` を submodule として追加し、実験用 `AnyView` を実装した。
 
 確認できたこと:
 

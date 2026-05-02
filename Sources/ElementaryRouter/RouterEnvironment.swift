@@ -99,14 +99,14 @@ public struct Link<Content: View> {
 
   public var body: some View {
     if let target {
-      a(.href(href), .target(target)) {
+      a(.href(href), .target(target), .data("router-link", value: "true")) {
         content
       }
       .onClick { event in
         handleClick(event)
       }
     } else {
-      a(.href(href)) {
+      a(.href(href), .data("router-link", value: "true")) {
         content
       }
       .onClick { event in

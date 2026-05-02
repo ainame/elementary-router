@@ -4,7 +4,7 @@
 
 - This repository is `elementary-router`; the Swift package product and module are `ElementaryRouter`.
 - Do not use the old names `elementary-ui-router` or `ElementaryUIRouter` in new code, docs, examples, or generated files.
-- This library is pre-release and has no compatibility contract. Prefer the best final API shape over preserving temporary APIs.
+- Version `0.0.1` is the first releasable API shape, but the library is still pre-1.0 and has no compatibility contract. Prefer the best final API shape over preserving temporary APIs.
 - The router is a URL state router for ElementaryUI running on Swift/WASM. Form actions, non-GET mutations, server functions, SSR, hydration, and loader caching are out of scope until the route tree and rendering model are stable.
 
 ## Implementation Constraints
@@ -23,10 +23,17 @@
 
 ## Known Design Blockers
 
-- `RouterView` should stay on the typed `@Routes` / `RouteView` model. Do not reintroduce a vendored ElementaryUI `AnyView` spike for route rendering.
+- `RouterView` should stay on the typed `@Routes` / generated `RouteView` model. Do not reintroduce a vendored ElementaryUI `AnyView` spike for route rendering.
 - `Link` cannot fully intercept client navigation until ElementaryUI exposes enough event API to call `preventDefault` for eligible clicks.
-- A temporary app-level workaround is acceptable for examples or consuming apps: mark router links and add a capture-phase HTML script that calls `preventDefault()` for eligible same-origin clicks before ElementaryUI's Swift `onClick` handler runs. Keep this documented as a workaround, not the final library contract.
+- The current app-level workaround is to have `Link` emit `data-router-link="true"` and add a capture-phase HTML script that calls `preventDefault()` for eligible same-origin clicks before ElementaryUI's Swift `onClick` handler runs. Keep this documented as a workaround, not the final library contract.
 - Nested route rendering is implemented through typed `@Layout` and `Outlet<Content>`; avoid runtime-erased outlet designs unless the route identity model is redesigned.
+
+## Release Hygiene
+
+- Keep the root `README.md` focused on the public 0.0.1 API, installation, known blockers, and example usage.
+- Do not commit vendored ElementaryUI experiments, temporary TODO files, generated build output, `node_modules`, or Vite `dist`.
+- `Examples/RouterExample` should build against the local package path and upstream `elementary-ui`.
+- If the Link interception workaround changes, update both `README.md` and `Examples/RouterExample/index.html`.
 
 ## Style
 
