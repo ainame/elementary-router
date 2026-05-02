@@ -1,7 +1,7 @@
 import ElementaryUI
 import Testing
 
-@testable import ElementaryUIRouter
+@testable import ElementaryRouter
 
 @Test func routeParametersExtractsStringsAndTypedValues() throws {
   let values: RouteParameters = ["lang": "ja", "profileId": 42]
@@ -72,6 +72,21 @@ import Testing
   #expect(match?.params.get("*") == "docs/readme")
 }
 
+@Test func matcherBuildsNestedMatchStack() throws {
+  let routes = RouteCollection()
+  let users = routes.route("/users") { EmptyHTML() }
+  let user = routes.children(of: users).route(":id") { EmptyHTML() }
+  let settings = routes.children(of: user).route("settings") { EmptyHTML() }
+  let tree = try routes.freeze()
+
+  let matches = tree.matches(RouteLocation(url: "/users/42/settings"))
+
+  #expect(matches.map(\.route) == [users, user, settings])
+  #expect(matches.map(\.path) == ["/users", "/users/:id", "/users/:id/settings"])
+  #expect(matches[1].params.get("id") == "42")
+  #expect(matches[2].params.get("id") == "42")
+}
+
 @Test func routeTreeBuildsHrefFromParamsAndQuery() throws {
   let routes = RouteCollection()
   let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
@@ -84,6 +99,17 @@ import Testing
   )
 
   #expect(href == "/ja/profile/42?tab=posts")
+}
+
+@Test func routeTreeReportsUnknownRouteHandles() throws {
+  let routes = RouteCollection()
+  routes.route("/") { EmptyHTML() }
+  let tree = try routes.freeze()
+  let unknown = RouteHandle(id: RouteID(rawValue: 999))
+
+  #expect(throws: RouteMatchError.unknownRoute) {
+    try tree.href(to: unknown)
+  }
 }
 
 @Test func memoryHistoryPushReplaceAndGoNotifyListeners() {
@@ -120,8 +146,20 @@ import Testing
 
   #expect(router.location.href == "/ja/profile/42?tab=posts")
   #expect(router.currentMatch?.route == profile)
+  #expect(router.matches.map(\.route) == [profile])
   #expect(router.currentMatch?.params.get("lang") == "ja")
   #expect(router.location.queryString == "tab=posts")
+}
+
+@Test func routerStoresNestedMatchStack() throws {
+  let routes = RouteCollection()
+  let users = routes.route("/users") { EmptyHTML() }
+  let user = routes.children(of: users).route(":id") { EmptyHTML() }
+  let tree = try routes.freeze()
+  let router = Router(routes: tree, history: MemoryHistory(initialPath: "/users/42"))
+
+  #expect(router.matches.map(\.route) == [users, user])
+  #expect(router.currentMatch?.params.get("id") == "42")
 }
 
 @Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
@@ -173,6 +211,7 @@ import Testing
   if case .error(let context) = tree.resolve(RouteLocation(url: "/profile/abc")) {
     #expect(context.error == expected)
     #expect(context.routeContext.match.params.get("profileId") == "abc")
+    #expect(context.routeContext.matches.map(\.route) == [context.routeContext.match.route])
   } else {
     Issue.record("Expected error resolution")
   }

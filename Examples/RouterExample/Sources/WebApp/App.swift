@@ -1,5 +1,5 @@
+import ElementaryRouter
 import ElementaryUI
-import ElementaryUIRouter
 
 @main
 struct App {

@@ -4,12 +4,12 @@
 import PackageDescription
 
 let package = Package(
-  name: "elementary-ui-router",
+  name: "elementary-router",
   platforms: [
     .macOS(.v15)
   ],
   products: [
-    .library(name: "ElementaryUIRouter", targets: ["ElementaryUIRouter"])
+    .library(name: "ElementaryRouter", targets: ["ElementaryRouter"])
   ],
   dependencies: [
     .package(url: "https://github.com/elementary-swift/elementary-ui", from: "0.2.2"),
@@ -17,15 +17,15 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "ElementaryUIRouter",
+      name: "ElementaryRouter",
       dependencies: [
         .product(name: "ElementaryUI", package: "elementary-ui"),
         .product(name: "JavaScriptKit", package: "JavaScriptKit"),
       ]
     ),
     .testTarget(
-      name: "ElementaryUIRouterTests",
-      dependencies: ["ElementaryUIRouter"]
+      name: "ElementaryRouterTests",
+      dependencies: ["ElementaryRouter"]
     ),
   ],
   swiftLanguageModes: [.v6]

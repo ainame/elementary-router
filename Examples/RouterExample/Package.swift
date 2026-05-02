@@ -13,7 +13,7 @@ let package = Package(
       name: "WebApp",
       dependencies: [
         .product(name: "ElementaryUI", package: "elementary-ui"),
-        .product(name: "ElementaryUIRouter", package: "elementary-ui-router"),
+        .product(name: "ElementaryRouter", package: "elementary-router"),
       ],
       swiftSettings: [
         .swiftLanguageMode(.v6)

@@ -18,11 +18,7 @@ public final class Router {
     self.routes = routes
     self.history = history
     self.location = history.location
-    if let match = routes.match(history.location) {
-      self.matches = [match]
-    } else {
-      self.matches = []
-    }
+    self.matches = routes.matches(history.location)
 
     self.subscription = history.listen { update in
       self.apply(update.location)
@@ -99,10 +95,6 @@ public final class Router {
 
   private func apply(_ location: RouteLocation) {
     self.location = location
-    if let match = routes.match(location) {
-      self.matches = [match]
-    } else {
-      self.matches = []
-    }
+    self.matches = routes.matches(location)
   }
 }

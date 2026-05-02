@@ -16,7 +16,7 @@ public final class RouteCollection {
     let erased: (RouteContext) throws(RouteValueError) -> Void = { _ throws(RouteValueError) in
       _ = render()
     }
-    return add(path: path, render: erased)
+    return add(path: path, parent: nil, render: erased)
   }
 
   @discardableResult
@@ -28,11 +28,18 @@ public final class RouteCollection {
       context throws(RouteValueError) in
       _ = try render(context)
     }
-    return add(path: path, render: erased)
+    return add(path: path, parent: nil, render: erased)
   }
 
   public func scope(_ path: String) -> RouteScope {
-    RouteScope(collection: self, prefix: path)
+    RouteScope(collection: self, prefix: path, parent: nil)
+  }
+
+  public func children(of parent: RouteHandle) -> RouteScope {
+    guard let record = records.first(where: { $0.handle == parent }) else {
+      preconditionFailure("Cannot create child routes for a handle that is not in this collection.")
+    }
+    return RouteScope(collection: self, prefix: record.path, parent: parent)
   }
 
   public func notFound<Content: View>(
@@ -60,6 +67,7 @@ public final class RouteCollection {
       compiled.append(
         CompiledRouteRecord(
           handle: record.handle,
+          parent: record.parent,
           pattern: pattern,
           render: record.render
         )
@@ -84,11 +92,12 @@ public final class RouteCollection {
   @discardableResult
   fileprivate func add(
     path: String,
+    parent: RouteHandle?,
     render: @escaping (RouteContext) throws(RouteValueError) -> Void
   ) -> RouteHandle {
     let handle = RouteHandle(id: RouteID(rawValue: nextID))
     nextID += 1
-    records.append(RouteRecordBuilder(handle: handle, path: path, render: render))
+    records.append(RouteRecordBuilder(handle: handle, parent: parent, path: path, render: render))
     return handle
   }
 }
@@ -96,10 +105,12 @@ public final class RouteCollection {
 public final class RouteScope {
   private let collection: RouteCollection
   private let prefix: String
+  private let parent: RouteHandle?
 
-  fileprivate init(collection: RouteCollection, prefix: String) {
+  fileprivate init(collection: RouteCollection, prefix: String, parent: RouteHandle?) {
     self.collection = collection
     self.prefix = RouteLocation.normalizedPath(prefix)
+    self.parent = parent
   }
 
   @discardableResult
@@ -110,7 +121,7 @@ public final class RouteScope {
     let erased: (RouteContext) throws(RouteValueError) -> Void = { _ throws(RouteValueError) in
       _ = render()
     }
-    return collection.add(path: joined(path), render: erased)
+    return collection.add(path: joined(path), parent: parent, render: erased)
   }
 
   @discardableResult
@@ -122,11 +133,11 @@ public final class RouteScope {
       context throws(RouteValueError) in
       _ = try render(context)
     }
-    return collection.add(path: joined(path), render: erased)
+    return collection.add(path: joined(path), parent: parent, render: erased)
   }
 
   public func scope(_ path: String) -> RouteScope {
-    RouteScope(collection: collection, prefix: joined(path))
+    RouteScope(collection: collection, prefix: joined(path), parent: parent)
   }
 
   private func joined(_ path: String) -> String {
@@ -139,12 +150,14 @@ public final class RouteScope {
 
 private struct RouteRecordBuilder {
   let handle: RouteHandle
+  let parent: RouteHandle?
   let path: String
   let render: (RouteContext) throws(RouteValueError) -> Void
 }
 
 struct CompiledRouteRecord {
   let handle: RouteHandle
+  let parent: RouteHandle?
   let pattern: RoutePattern
   let render: (RouteContext) throws(RouteValueError) -> Void
 }

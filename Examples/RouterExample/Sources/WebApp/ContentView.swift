@@ -1,10 +1,11 @@
+import ElementaryRouter
 import ElementaryUI
-import ElementaryUIRouter
 
 final class ExampleRoutes {
   private let collection = RouteCollection()
 
   let home: RouteHandle
+  let lang: RouteHandle
   let profile: RouteHandle
   let docs: RouteHandle
 
@@ -13,7 +14,12 @@ final class ExampleRoutes {
       HomePage()
     }
 
-    profile = collection.route("/:lang/profile/:profileId") { context throws(RouteValueError) in
+    lang = collection.route("/:lang") {
+      EmptyHTML()
+    }
+
+    profile = collection.children(of: lang).route("profile/:profileId") {
+      context throws(RouteValueError) in
       ProfilePage(
         lang: try context.params.require("lang"),
         profileID: try context.params.require("profileId", Int.self),

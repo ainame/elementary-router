@@ -16,6 +16,14 @@ struct RoutePattern: Equatable, Sendable {
   }
 
   func match(_ path: String) -> RouteParameters? {
+    match(path, allowPrefix: false)
+  }
+
+  func prefixMatch(_ path: String) -> RouteParameters? {
+    match(path, allowPrefix: true)
+  }
+
+  private func match(_ path: String, allowPrefix: Bool) -> RouteParameters? {
     let pathSegments = RoutePattern.pathSegments(RoutePattern.normalized(path))
     var values = RouteParameters()
     var patternIndex = 0
@@ -42,7 +50,7 @@ struct RoutePattern: Equatable, Sendable {
       }
     }
 
-    return pathIndex == pathSegments.count ? values : nil
+    return allowPrefix || pathIndex == pathSegments.count ? values : nil
   }
 
   func buildPath(params: RouteParameters) throws(RouteMatchError) -> String {
@@ -81,6 +89,10 @@ struct RoutePattern: Equatable, Sendable {
       }
     }
     return score
+  }
+
+  var depth: Int {
+    segments.count
   }
 
   private static func normalized(_ path: String) -> String {

@@ -4,7 +4,12 @@ public struct RouteTree {
   let errorRenderer: ((RouteErrorContext) -> Void)?
 
   public func match(_ location: RouteLocation) -> RouteMatch? {
-    findRecord(for: location).match
+    matches(location).last
+  }
+
+  public func matches(_ location: RouteLocation) -> [RouteMatch] {
+    guard let leaf = findLeafRecord(for: location) else { return [] }
+    return matchStack(for: leaf, location: location)
   }
 
   public func href(
@@ -14,7 +19,7 @@ public struct RouteTree {
     hash: String = ""
   ) throws(RouteMatchError) -> String {
     guard let record = records.first(where: { $0.handle == route }) else {
-      throw RouteMatchError.missingRequiredParameter(name: "route")
+      throw RouteMatchError.unknownRoute
     }
 
     var href = try record.pattern.buildPath(params: params)
@@ -30,8 +35,17 @@ public struct RouteTree {
   }
 
   public func resolve(_ location: RouteLocation) -> RouteRenderResolution {
-    let result = findRecord(for: location)
-    guard let record = result.record, let match = result.match else {
+    guard let record = findLeafRecord(for: location) else {
+      return .notFound(
+        RouteNotFoundContext(
+          location: location,
+          query: QueryString.parse(location.queryString)
+        )
+      )
+    }
+
+    let matches = matchStack(for: record, location: location)
+    guard let match = matches.last else {
       return .notFound(
         RouteNotFoundContext(
           location: location,
@@ -41,10 +55,11 @@ public struct RouteTree {
     }
 
     let context = RouteContext(
-      params: match.params,
+      params: combinedParams(from: matches),
       query: QueryString.parse(location.queryString),
       location: location,
-      match: match
+      match: match,
+      matches: matches
     )
 
     do throws(RouteValueError) {
@@ -71,17 +86,52 @@ public struct RouteTree {
     }
   }
 
-  private func findRecord(for location: RouteLocation) -> (
-    record: CompiledRouteRecord?, match: RouteMatch?
-  ) {
+  private func findLeafRecord(for location: RouteLocation) -> CompiledRouteRecord? {
     for record in records {
-      if let params = record.pattern.match(location.path) {
-        return (
-          record,
-          RouteMatch(route: record.handle, path: record.pattern.path, params: params)
-        )
+      if record.pattern.match(location.path) != nil {
+        return record
       }
     }
-    return (nil, nil)
+    return nil
+  }
+
+  private func matchStack(for leaf: CompiledRouteRecord, location: RouteLocation) -> [RouteMatch] {
+    var recordsByID: [RouteID: CompiledRouteRecord] = [:]
+    for record in records {
+      recordsByID[record.handle.id] = record
+    }
+
+    var chain: [CompiledRouteRecord] = []
+    var current: CompiledRouteRecord? = leaf
+    while let record = current {
+      chain.append(record)
+      if let parent = record.parent {
+        current = recordsByID[parent.id]
+      } else {
+        current = nil
+      }
+    }
+
+    var matches: [RouteMatch] = []
+    for record in chain.reversed() {
+      let params =
+        record.handle == leaf.handle
+        ? record.pattern.match(location.path)
+        : record.pattern.prefixMatch(location.path)
+      if let params {
+        matches.append(RouteMatch(route: record.handle, path: record.pattern.path, params: params))
+      }
+    }
+    return matches
+  }
+
+  private func combinedParams(from matches: [RouteMatch]) -> RouteParameters {
+    var params = RouteParameters()
+    for match in matches {
+      for (name, value) in match.params.pairs {
+        params.append(name, value)
+      }
+    }
+    return params
   }
 }

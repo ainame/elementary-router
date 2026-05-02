@@ -6,7 +6,7 @@ This example was scaffolded with:
 npx degit elementary-swift/starter-vite Examples/RouterExample
 ```
 
-It uses ElementaryUI plus the local `ElementaryUIRouter` package through a SwiftPM path dependency.
+It uses ElementaryUI plus the local `ElementaryRouter` package through a SwiftPM path dependency.
 
 ## Run
 
