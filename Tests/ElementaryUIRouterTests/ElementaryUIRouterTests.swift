@@ -2,10 +2,8 @@ import ElementaryUI
 import Testing
 @testable import ElementaryUIRouter
 
-@Test func routeValuesExtractStringsAndTypedValues() throws {
-    let values = RouteValues()
-        .set("lang", "ja")
-        .set("profileId", 42)
+@Test func routeParametersExtractsStringsAndTypedValues() throws {
+    let values: RouteParameters = ["lang": "ja", "profileId": 42]
 
     #expect(try values.require("lang") == "ja")
     #expect(try values.require("profileId", Int.self) == 42)
@@ -13,8 +11,16 @@ import Testing
     #expect(values.get("profileId", Int.self) == 42)
 }
 
-@Test func routeValuesReportMissingAndInvalidValues() {
-    let values = RouteValues().set("profileId", "abc")
+@Test func routeParametersSupportsInitializerLists() throws {
+    let values = RouteParameters(("lang", "ja"), ("profileId", 42), ("enabled", true))
+
+    #expect(try values.require("lang") == "ja")
+    #expect(try values.require("profileId", Int.self) == 42)
+    #expect(try values.require("enabled", Bool.self))
+}
+
+@Test func routeParametersReportsMissingAndInvalidValues() {
+    let values: RouteParameters = ["profileId": "abc"]
 
     #expect(throws: RouteValueError.missing(name: "lang")) {
         try values.require("lang")
@@ -34,7 +40,7 @@ import Testing
 }
 
 @Test func queryStringStringifiesValuesInInsertionOrder() {
-    let values = RouteValues()
+    let values = RouteParameters()
         .append("tag", "swift")
         .append("tag", "wasm")
         .set("q", "hello world")
@@ -72,10 +78,8 @@ import Testing
 
     let href = try tree.href(
         to: profile,
-        params: RouteValues()
-            .set("lang", "ja")
-            .set("profileId", 42),
-        query: RouteValues().set("tab", "posts")
+        params: ["lang": "ja", "profileId": 42],
+        query: ["tab": "posts"]
     )
 
     #expect(href == "/ja/profile/42?tab=posts")
@@ -109,14 +113,71 @@ import Testing
 
     try router.navigate(
         to: profile,
-        params: RouteValues()
-            .set("lang", "ja")
-            .set("profileId", 42),
-        query: RouteValues().set("tab", "posts")
+        params: ["lang": "ja", "profileId": 42],
+        query: ["tab": "posts"]
     )
 
     #expect(router.location.href == "/ja/profile/42?tab=posts")
     #expect(router.currentMatch?.route == profile)
     #expect(router.currentMatch?.params.get("lang") == "ja")
     #expect(router.location.queryString == "tab=posts")
+}
+
+@Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
+    let routes = RouteCollection()
+    routes.route("/") { EmptyHTML() }
+    var notFoundPath = ""
+    func captureNotFound(_ context: RouteNotFoundContext) -> EmptyHTML {
+        notFoundPath = context.location.path
+        return EmptyHTML()
+    }
+    routes.notFound { context in
+        captureNotFound(context)
+    }
+    let tree = try routes.freeze()
+
+    if case let .notFound(context) = tree.resolve(RouteLocation(url: "/missing?q=swift")) {
+        #expect(context.location.path == "/missing")
+        #expect(context.query.get("q") == "swift")
+    } else {
+        Issue.record("Expected notFound resolution")
+    }
+
+    #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
+        try tree.render(RouteLocation(url: "/missing"))
+    }
+    #expect(notFoundPath == "/missing")
+}
+
+@Test func routeTreeResolvesRouteValueErrorsThroughRoutePolicy() throws {
+    let routes = RouteCollection()
+    func requireProfileID(_ context: RouteContext) throws(RouteValueError) -> EmptyHTML {
+        _ = try context.params.require("profileId", Int.self)
+        return EmptyHTML()
+    }
+    routes.route("/profile/:profileId") { context throws(RouteValueError) in
+        try requireProfileID(context)
+    }
+    var renderedError: RouteValueError?
+    func captureError(_ context: RouteErrorContext) -> EmptyHTML {
+        renderedError = context.error
+        return EmptyHTML()
+    }
+    routes.error { context in
+        captureError(context)
+    }
+    let tree = try routes.freeze()
+    let expected = RouteValueError.invalid(name: "profileId", rawValue: "abc", expected: "Int")
+
+    if case let .error(context) = tree.resolve(RouteLocation(url: "/profile/abc")) {
+        #expect(context.error == expected)
+        #expect(context.routeContext.match.params.get("profileId") == "abc")
+    } else {
+        Issue.record("Expected error resolution")
+    }
+
+    #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
+        try tree.render(RouteLocation(url: "/profile/abc"))
+    }
+    #expect(renderedError == expected)
 }

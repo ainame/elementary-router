@@ -15,9 +15,9 @@ struct RoutePattern: Equatable, Sendable {
         self.segments = try RoutePattern.parseSegments(self.path)
     }
 
-    func match(_ path: String) -> RouteValues? {
+    func match(_ path: String) -> RouteParameters? {
         let pathSegments = RoutePattern.pathSegments(RoutePattern.normalized(path))
-        var values = RouteValues()
+        var values = RouteParameters()
         var patternIndex = 0
         var pathIndex = 0
 
@@ -45,7 +45,7 @@ struct RoutePattern: Equatable, Sendable {
         return pathIndex == pathSegments.count ? values : nil
     }
 
-    func buildPath(params: RouteValues) throws(RouteMatchError) -> String {
+    func buildPath(params: RouteParameters) throws(RouteMatchError) -> String {
         if segments.isEmpty { return "/" }
 
         var result = ""

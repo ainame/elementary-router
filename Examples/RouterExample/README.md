@@ -30,4 +30,6 @@ npm run build
 
 The example registers routes with an `ExampleRoutes` instance and keeps the `RouteHandle` values for `Link` and programmatic navigation.
 
-`RouterView()` is mounted in the app, but route view type erasure is still blocked by ElementaryUI's current public API. Until ElementaryUI exposes a public type-erased mount/view API, this example renders the active route through `router.currentMatch` as a small compatibility layer.
+Fallback policy is registered on `RouteCollection` with `notFound` and `error`, so route fallback selection does not live inside a view body.
+
+`RouterView()` is mounted in the app, but route view type erasure is still blocked by ElementaryUI's current public API. Until ElementaryUI exposes a public type-erased mount/view API, `RouterView` can resolve the active route and invoke the route pipeline, but cannot yet mount the selected route view.

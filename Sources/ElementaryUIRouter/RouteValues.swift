@@ -9,6 +9,38 @@ public protocol RouteValue {
     var routeValueString: String { get }
 }
 
+public struct RouteValueLiteral: Equatable, Sendable {
+    public let rawValue: String
+
+    public init(_ value: some RouteValue) {
+        self.rawValue = value.routeValueString
+    }
+}
+
+extension RouteValueLiteral: ExpressibleByStringLiteral {
+    public init(stringLiteral value: String) {
+        self.rawValue = value
+    }
+}
+
+extension RouteValueLiteral: ExpressibleByIntegerLiteral {
+    public init(integerLiteral value: Int) {
+        self.rawValue = value.routeValueString
+    }
+}
+
+extension RouteValueLiteral: ExpressibleByFloatLiteral {
+    public init(floatLiteral value: Double) {
+        self.rawValue = value.routeValueString
+    }
+}
+
+extension RouteValueLiteral: ExpressibleByBooleanLiteral {
+    public init(booleanLiteral value: Bool) {
+        self.rawValue = value.routeValueString
+    }
+}
+
 extension String: RouteValue {
     public static var routeValueTypeName: String { "String" }
     public static func parseRouteValue(_ rawValue: String) -> String? { rawValue }
@@ -41,7 +73,7 @@ extension Bool: RouteValue {
     public var routeValueString: String { self ? "true" : "false" }
 }
 
-public struct RouteValues: Equatable, Sendable {
+public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiteral {
     private var storage: [String: [String]]
     private var order: [(String, String)]
 
@@ -55,6 +87,28 @@ public struct RouteValues: Equatable, Sendable {
         for (name, value) in values {
             append(name, value)
         }
+    }
+
+    public init(_ values: [(String, RouteValueLiteral)]) {
+        self.init()
+        for (name, value) in values {
+            append(name, value.rawValue)
+        }
+    }
+
+    public init(_ values: KeyValuePairs<String, RouteValueLiteral>) {
+        self.init()
+        for (name, value) in values {
+            append(name, value.rawValue)
+        }
+    }
+
+    public init(_ values: (String, RouteValueLiteral)...) {
+        self.init(values)
+    }
+
+    public init(dictionaryLiteral elements: (String, RouteValueLiteral)...) {
+        self.init(elements)
     }
 
     public func contains(_ name: String) -> Bool {
@@ -91,14 +145,14 @@ public struct RouteValues: Equatable, Sendable {
         return value
     }
 
-    public func set(_ name: String, _ value: some RouteValue) -> RouteValues {
+    public func set(_ name: String, _ value: some RouteValue) -> RouteParameters {
         var copy = self
         copy.storage[name] = [value.routeValueString]
         copy.rebuildOrderReplacing(name, with: [value.routeValueString])
         return copy
     }
 
-    public func append(_ name: String, _ value: some RouteValue) -> RouteValues {
+    public func append(_ name: String, _ value: some RouteValue) -> RouteParameters {
         var copy = self
         copy.append(name, value.routeValueString)
         return copy
@@ -120,7 +174,7 @@ public struct RouteValues: Equatable, Sendable {
         }
     }
 
-    public static func == (lhs: RouteValues, rhs: RouteValues) -> Bool {
+    public static func == (lhs: RouteParameters, rhs: RouteParameters) -> Bool {
         guard lhs.order.count == rhs.order.count else { return false }
         for index in lhs.order.indices {
             guard lhs.order[index].0 == rhs.order[index].0,
@@ -132,3 +186,4 @@ public struct RouteValues: Equatable, Sendable {
         return true
     }
 }
+

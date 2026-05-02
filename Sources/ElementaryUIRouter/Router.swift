@@ -37,11 +37,11 @@ public final class Router {
         matches.last
     }
 
-    public func href(to route: RouteHandle, params: RouteValues = RouteValues(), query: RouteValues = RouteValues(), hash: String = "") throws(RouteMatchError) -> String {
+    public func href(to route: RouteHandle, params: RouteParameters = RouteParameters(), query: RouteParameters = RouteParameters(), hash: String = "") throws(RouteMatchError) -> String {
         try routes.href(to: route, params: params, query: query, hash: hash)
     }
 
-    public func navigate(to route: RouteHandle, params: RouteValues = RouteValues(), query: RouteValues = RouteValues(), hash: String = "", replace: Bool = false) throws(RouteMatchError) {
+    public func navigate(to route: RouteHandle, params: RouteParameters = RouteParameters(), query: RouteParameters = RouteParameters(), hash: String = "", replace: Bool = false) throws(RouteMatchError) {
         let href = try routes.href(to: route, params: params, query: query, hash: hash)
         navigate(to: RouteLocation(url: href), replace: replace)
     }
@@ -57,7 +57,7 @@ public final class Router {
         navigationState = .idle
     }
 
-    public func replace(to route: RouteHandle, params: RouteValues = RouteValues(), query: RouteValues = RouteValues(), hash: String = "") throws(RouteMatchError) {
+    public func replace(to route: RouteHandle, params: RouteParameters = RouteParameters(), query: RouteParameters = RouteParameters(), hash: String = "") throws(RouteMatchError) {
         try navigate(to: route, params: params, query: query, hash: hash, replace: true)
     }
 
@@ -71,6 +71,14 @@ public final class Router {
 
     public func isActive(_ route: RouteHandle) -> Bool {
         currentMatch?.route == route
+    }
+
+    public func resolveCurrentRoute() -> RouteRenderResolution {
+        routes.resolve(location)
+    }
+
+    public func renderCurrentRoute() throws(RouterRenderError) {
+        try routes.render(location)
     }
 
     private func apply(_ location: RouteLocation) {

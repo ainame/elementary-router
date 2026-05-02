@@ -26,6 +26,7 @@ public struct RouterView {
     public init() {}
 
     public var body: some View {
+        let _ = try? router?.renderCurrentRoute()
         EmptyHTML()
     }
 }
@@ -35,16 +36,16 @@ public struct Link<Content: View> {
     @Environment(#Key(\.router)) var router
 
     let route: RouteHandle
-    let params: RouteValues
-    let query: RouteValues
+    let params: RouteParameters
+    let query: RouteParameters
     let hash: String
     let replace: Bool
     let content: Content
 
     public init(
         to route: RouteHandle,
-        params: RouteValues = RouteValues(),
-        query: RouteValues = RouteValues(),
+        params: RouteParameters = RouteParameters(),
+        query: RouteParameters = RouteParameters(),
         hash: String = "",
         replace: Bool = false,
         @HTMLBuilder content: () -> Content

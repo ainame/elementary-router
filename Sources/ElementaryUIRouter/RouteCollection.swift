@@ -2,6 +2,8 @@ import ElementaryUI
 
 public final class RouteCollection {
     private var records: [RouteRecordBuilder] = []
+    private var notFoundRenderer: ((RouteNotFoundContext) -> Void)?
+    private var errorRenderer: ((RouteErrorContext) -> Void)?
     private var nextID = 0
 
     public init() {}
@@ -32,6 +34,18 @@ public final class RouteCollection {
         RouteScope(collection: self, prefix: path)
     }
 
+    public func notFound<Content: View>(
+        @HTMLBuilder render: @escaping (RouteNotFoundContext) -> Content
+    ) {
+        notFoundRenderer = { context in _ = render(context) }
+    }
+
+    public func error<Content: View>(
+        @HTMLBuilder render: @escaping (RouteErrorContext) -> Content
+    ) {
+        errorRenderer = { context in _ = render(context) }
+    }
+
     public func freeze() throws(RouteTreeError) -> RouteTree {
         var compiled: [CompiledRouteRecord] = []
         var seenPaths: [String] = []
@@ -59,7 +73,11 @@ public final class RouteCollection {
             }
         }
 
-        return RouteTree(records: compiled)
+        return RouteTree(
+            records: compiled,
+            notFoundRenderer: notFoundRenderer,
+            errorRenderer: errorRenderer
+        )
     }
 
     @discardableResult

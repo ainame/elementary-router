@@ -7,7 +7,7 @@ public enum RouteMatchError: Error, Equatable, Sendable {
     case missingRequiredParameter(name: String)
 }
 
-public enum RouterRenderError: Error {
+public enum RouterRenderError: Error, Equatable, Sendable {
     case unavailableUntilElementaryUIExposesTypeErasedView
-    case routeRenderFailed(any Error)
+    case routeRenderFailed(RouteValueError)
 }

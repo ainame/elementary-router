@@ -24,6 +24,14 @@ final class ExampleRoutes {
         docs = collection.route("/docs/*") { context in
             DocsPage(slug: context.params.get("*") ?? "")
         }
+
+        collection.notFound { context in
+            NotFoundPage(path: context.location.path)
+        }
+
+        collection.error { context in
+            InvalidRoutePage(error: context.error)
+        }
     }
 
     func freeze() throws(RouteTreeError) -> RouteTree {
@@ -47,16 +55,14 @@ struct ContentView {
                         }
                         Link(
                             to: routes.profile,
-                            params: RouteValues()
-                                .set("lang", "ja")
-                                .set("profileId", 42),
-                            query: RouteValues().set("tab", "posts")
+                            params: ["lang": "ja", "profileId": 42],
+                            query: ["tab": "posts"]
                         ) {
                             "Profile"
                         }
                         Link(
                             to: routes.docs,
-                            params: RouteValues().set("*", "guide/get-started"),
+                            params: ["*": "guide/get-started"],
                             hash: "install"
                         ) {
                             "Docs"
@@ -65,37 +71,9 @@ struct ContentView {
                 }
 
                 main(.style(mainStyle)) {
-                    RoutePreview(routes: routes)
                     RouterView()
                 }
             }
-        }
-    }
-}
-
-@View
-struct RoutePreview {
-    @Environment(#Key(\.router)) var router
-
-    let routes: ExampleRoutes
-
-    var body: some View {
-        if let match = router?.currentMatch {
-            if match.route == routes.home {
-                HomePage()
-            } else if match.route == routes.profile {
-                ProfilePage(
-                    lang: match.params.get("lang") ?? "unknown",
-                    profileID: match.params.get("profileId", Int.self) ?? -1,
-                    tab: QueryString.parse(router?.location.queryString ?? "").get("tab") ?? "overview"
-                )
-            } else if match.route == routes.docs {
-                DocsPage(slug: match.params.get("*") ?? "")
-            } else {
-                NotFoundPage(path: router?.location.path ?? "/")
-            }
-        } else {
-            NotFoundPage(path: router?.location.path ?? "/")
         }
     }
 }
@@ -143,6 +121,29 @@ struct DocsPage {
             p(.style(textStyle)) {
                 slug.isEmpty ? "Wildcard route matched." : "Wildcard route matched: \(slug)"
             }
+        }
+    }
+}
+
+@View
+struct InvalidRoutePage {
+    let error: RouteValueError
+
+    var body: some View {
+        section(.style(panelStyle)) {
+            h2(.style(headingStyle)) { "Invalid Route" }
+            p(.style(textStyle)) {
+                message
+            }
+        }
+    }
+
+    private var message: String {
+        switch error {
+        case let .missing(name):
+            "Missing route value: \(name)."
+        case let .invalid(name, rawValue, expected):
+            "Invalid route value \(name)=\(rawValue). Expected \(expected)."
         }
     }
 }
