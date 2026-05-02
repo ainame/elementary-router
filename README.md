@@ -80,3 +80,26 @@ let href = try routeSet.profileHref(lang: "ja", profileId: 42, tab: "posts")
 ```
 
 `Link` preserves native browser behavior for modifier clicks and non-self targets. Full client-side interception still needs ElementaryUI to expose `MouseEvent.preventDefault()` or an equivalent cancellable event API.
+
+## Known Link Interception Blocker
+
+ElementaryUI currently exposes mouse button and modifier-key state, but not a public way to call `preventDefault()` from Swift. Until that exists, `Link` can call router navigation for eligible clicks but cannot stop the browser's native anchor navigation by itself.
+
+For an app-level workaround, add a capture-phase script to the host HTML and mark router anchors, for example with `data-router-link`:
+
+```html
+<script>
+document.addEventListener("click", event => {
+  const anchor = event.target.closest("a[data-router-link]");
+  if (!anchor || event.defaultPrevented) return;
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  if (anchor.target && anchor.target !== "_self") return;
+  if (anchor.hasAttribute("download")) return;
+  if (new URL(anchor.href, location.href).origin !== location.origin) return;
+
+  event.preventDefault();
+}, true);
+</script>
+```
+
+This is a workaround for controlled apps, not the final library contract. The preferred fix is for ElementaryUI to expose `MouseEvent.preventDefault()` or an equivalent cancellable event handler.

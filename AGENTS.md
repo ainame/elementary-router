@@ -23,9 +23,10 @@
 
 ## Known Design Blockers
 
-- `RouterView` is intentionally limited until ElementaryUI exposes a public type-erased view or mount API that can switch route view types at runtime.
+- `RouterView` should stay on the typed `@Routes` / `RouteView` model. Do not reintroduce a vendored ElementaryUI `AnyView` spike for route rendering.
 - `Link` cannot fully intercept client navigation until ElementaryUI exposes enough event API to call `preventDefault` for eligible clicks.
-- Nested route rendering should eventually support a layout/outlet model instead of only rendering the leaf.
+- A temporary app-level workaround is acceptable for examples or consuming apps: mark router links and add a capture-phase HTML script that calls `preventDefault()` for eligible same-origin clicks before ElementaryUI's Swift `onClick` handler runs. Keep this documented as a workaround, not the final library contract.
+- Nested route rendering is implemented through typed `@Layout` and `Outlet<Content>`; avoid runtime-erased outlet designs unless the route identity model is redesigned.
 
 ## Style
 
