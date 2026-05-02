@@ -3,6 +3,45 @@ import Testing
 
 @testable import ElementaryRouter
 
+@Routes
+struct MacroRoutes {
+  @Route("/")
+  static func home() -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @Route("/users/:id")
+  static func user(id: Int) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @Route("/files/*")
+  static func file(splat: Wildcard) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @NotFound
+  static func notFound(context: RouteNotFoundContext) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @RouteError
+  static func routeError(context: RouteErrorContext) -> EmptyHTML {
+    EmptyHTML()
+  }
+}
+
+@Test func routesMacroGeneratesRouteSetAndTypedRouteView() throws {
+  let routeSet = try MacroRoutes.routes()
+  let router = Router(routes: routeSet.tree, history: MemoryHistory(initialPath: "/users/42"))
+
+  #expect(router.currentMatch?.route == routeSet.handles.user)
+  #expect(router.currentMatch?.params.get("id") == "42")
+  #expect(
+    try router.href(to: routeSet.handles.file, params: ["*": "docs/readme"]) == "/files/docs/readme"
+  )
+}
+
 @Test func routeParametersExtractsStringsAndTypedValues() throws {
   let values: RouteParameters = ["lang": "ja", "profileId": 42]
 
@@ -50,7 +89,7 @@ import Testing
 }
 
 @Test func matcherPrefersStaticRoutesOverDynamicRoutes() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   let user = routes.route("/users/:id") { EmptyHTML() }
   let newUser = routes.route("/users/new") { EmptyHTML() }
   let tree = try routes.freeze()
@@ -63,7 +102,7 @@ import Testing
 }
 
 @Test func matcherSupportsWildcardRoutes() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   let files = routes.route("/files/*") { EmptyHTML() }
   let tree = try routes.freeze()
 
@@ -73,7 +112,7 @@ import Testing
 }
 
 @Test func matcherBuildsNestedMatchStack() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   let users = routes.route("/users") { EmptyHTML() }
   let user = routes.children(of: users).route(":id") { EmptyHTML() }
   let settings = routes.children(of: user).route("settings") { EmptyHTML() }
@@ -88,7 +127,7 @@ import Testing
 }
 
 @Test func routeTreeBuildsHrefFromParamsAndQuery() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
   let tree = try routes.freeze()
 
@@ -102,7 +141,7 @@ import Testing
 }
 
 @Test func routeTreeReportsUnknownRouteHandles() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   routes.route("/") { EmptyHTML() }
   let tree = try routes.freeze()
   let unknown = RouteHandle(id: RouteID(rawValue: 999))
@@ -129,7 +168,7 @@ import Testing
 }
 
 @Test func routerNavigateUpdatesLocationAndMatches() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   let home = routes.route("/") { EmptyHTML() }
   let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
   let tree = try routes.freeze()
@@ -152,7 +191,7 @@ import Testing
 }
 
 @Test func routerStoresNestedMatchStack() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   let users = routes.route("/users") { EmptyHTML() }
   let user = routes.children(of: users).route(":id") { EmptyHTML() }
   let tree = try routes.freeze()
@@ -163,7 +202,7 @@ import Testing
 }
 
 @Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   routes.route("/") { EmptyHTML() }
   var notFoundPath = ""
   func captureNotFound(_ context: RouteNotFoundContext) -> EmptyHTML {
@@ -182,14 +221,12 @@ import Testing
     Issue.record("Expected notFound resolution")
   }
 
-  #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
-    try tree.render(RouteLocation(url: "/missing"))
-  }
+  _ = try tree.render(RouteLocation(url: "/missing"))
   #expect(notFoundPath == "/missing")
 }
 
 @Test func routeTreeResolvesRouteValueErrorsThroughRoutePolicy() throws {
-  let routes = RouteCollection()
+  let routes = RouteCollection<EmptyHTML>()
   func requireProfileID(_ context: RouteContext) throws(RouteValueError) -> EmptyHTML {
     _ = try context.params.require("profileId", Int.self)
     return EmptyHTML()
@@ -216,8 +253,69 @@ import Testing
     Issue.record("Expected error resolution")
   }
 
-  #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
-    try tree.render(RouteLocation(url: "/profile/abc"))
-  }
+  _ = try tree.render(RouteLocation(url: "/profile/abc"))
   #expect(renderedError == expected)
+}
+
+@Test func routeTreeRenderReturnsMatchedRouteView() throws {
+  let routes = RouteCollection<EmptyHTML>()
+  var renderedPath = ""
+  routes.route("/docs/*") { context in
+    renderedPath = context.params.get("*") ?? ""
+    return EmptyHTML()
+  }
+  let tree = try routes.freeze()
+
+  _ = try tree.render(RouteLocation(url: "/docs/guide/get-started"))
+
+  #expect(renderedPath == "guide/get-started")
+}
+
+@Test func routeTreeEvaluatesNestedRouteBuildersFromParentToLeaf() throws {
+  let routes = RouteCollection<EmptyHTML>()
+  var rendered: [String] = []
+  let lang = routes.route("/:lang") { context throws(RouteValueError) in
+    rendered.append("layout:\(try context.params.require("lang"))")
+    return EmptyHTML()
+  }
+  let profile = routes.children(of: lang).route("profile/:profileId") {
+    context throws(RouteValueError) in
+    rendered.append("profile:\(try context.params.require("profileId", Int.self))")
+    return EmptyHTML()
+  }
+  let tree = try routes.freeze()
+
+  if case .matched(let context) = tree.resolve(RouteLocation(url: "/ja/profile/42")) {
+    #expect(context.match.route == profile)
+    #expect(context.params.get("lang") == "ja")
+    #expect(context.params.get("profileId") == "42")
+  } else {
+    Issue.record("Expected matched resolution")
+  }
+
+  #expect(rendered == ["layout:ja", "profile:42"])
+}
+
+@Test func routeTreeReportsParentRouteValueErrorsBeforeRenderingChildren() throws {
+  let routes = RouteCollection<EmptyHTML>()
+  var childRendered = false
+  let account = routes.route("/accounts/:accountId") { context throws(RouteValueError) in
+    _ = try context.params.require("accountId", Int.self)
+    return EmptyHTML()
+  }
+  routes.children(of: account).route("settings") {
+    childRendered = true
+    return EmptyHTML()
+  }
+  let tree = try routes.freeze()
+
+  if case .error(let context) = tree.resolve(RouteLocation(url: "/accounts/abc/settings")) {
+    #expect(context.error == .invalid(name: "accountId", rawValue: "abc", expected: "Int"))
+    #expect(context.routeContext.match.route == account)
+    #expect(context.routeContext.params.get("accountId") == "abc")
+  } else {
+    Issue.record("Expected parent route error")
+  }
+
+  #expect(!childRendered)
 }

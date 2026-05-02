@@ -1,3 +1,4 @@
+import ElementaryUI
 import Reactivity
 
 public enum NavigationState: Equatable, Sendable {
@@ -6,19 +7,40 @@ public enum NavigationState: Equatable, Sendable {
 }
 
 @Reactive
-public final class Router {
+public final class RouterState {
   public private(set) var location: RouteLocation
   public private(set) var matches: [RouteMatch]
   public private(set) var navigationState: NavigationState = .idle
-  @ReactiveIgnored private let routes: RouteTree
-  @ReactiveIgnored private let history: any RouterHistory
-  @ReactiveIgnored private var subscription: HistorySubscription?
 
-  public init(routes: RouteTree, history: any RouterHistory) {
+  init(location: RouteLocation, matches: [RouteMatch]) {
+    self.location = location
+    self.matches = matches
+  }
+
+  func startNavigation() {
+    navigationState = .navigating
+  }
+
+  func finishNavigation() {
+    navigationState = .idle
+  }
+
+  func apply(location: RouteLocation, matches: [RouteMatch]) {
+    self.location = location
+    self.matches = matches
+  }
+}
+
+public final class Router<RouteContent: View> {
+  private let state: RouterState
+  private let routes: RouteTree<RouteContent>
+  private let history: any RouterHistory
+  private var subscription: HistorySubscription?
+
+  public init(routes: RouteTree<RouteContent>, history: any RouterHistory) {
     self.routes = routes
     self.history = history
-    self.location = history.location
-    self.matches = routes.matches(history.location)
+    self.state = RouterState(location: history.location, matches: routes.matches(history.location))
 
     self.subscription = history.listen { update in
       self.apply(update.location)
@@ -27,6 +49,18 @@ public final class Router {
 
   deinit {
     subscription?.cancel()
+  }
+
+  public var location: RouteLocation {
+    state.location
+  }
+
+  public var matches: [RouteMatch] {
+    state.matches
+  }
+
+  public var navigationState: NavigationState {
+    state.navigationState
   }
 
   public var currentMatch: RouteMatch? {
@@ -54,14 +88,14 @@ public final class Router {
   }
 
   public func navigate(to location: RouteLocation, replace: Bool = false) {
-    navigationState = .navigating
+    state.startNavigation()
     if replace {
       history.replace(location)
     } else {
       history.push(location)
     }
     apply(location)
-    navigationState = .idle
+    state.finishNavigation()
   }
 
   public func replace(
@@ -89,12 +123,13 @@ public final class Router {
     routes.resolve(location)
   }
 
-  public func renderCurrentRoute() throws(RouterRenderError) {
+  public func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
     try routes.render(location)
   }
 
   private func apply(_ location: RouteLocation) {
-    self.location = location
-    self.matches = routes.matches(location)
+    state.apply(location: location, matches: routes.matches(location))
   }
 }
+
+extension Router: RouterNavigation {}

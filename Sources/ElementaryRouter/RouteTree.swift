@@ -1,7 +1,9 @@
-public struct RouteTree {
-  let records: [CompiledRouteRecord]
-  let notFoundRenderer: ((RouteNotFoundContext) -> Void)?
-  let errorRenderer: ((RouteErrorContext) -> Void)?
+import ElementaryUI
+
+public struct RouteTree<RouteContent: View> {
+  let records: [CompiledRouteRecord<RouteContent>]
+  let notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
+  let errorRenderer: ((RouteErrorContext) -> RouteContent)?
 
   public func match(_ location: RouteLocation) -> RouteMatch? {
     matches(location).last
@@ -45,7 +47,7 @@ public struct RouteTree {
     }
 
     let matches = matchStack(for: record, location: location)
-    guard let match = matches.last else {
+    guard !matches.isEmpty else {
       return .notFound(
         RouteNotFoundContext(
           location: location,
@@ -54,39 +56,71 @@ public struct RouteTree {
       )
     }
 
-    let context = RouteContext(
-      params: combinedParams(from: matches),
-      query: QueryString.parse(location.queryString),
-      location: location,
-      match: match,
-      matches: matches
-    )
+    let contexts = routeContexts(for: matches, location: location)
+    let recordsByID = recordsByRouteID()
 
-    do throws(RouteValueError) {
-      try record.render(context)
-      return .matched(context)
-    } catch {
-      return .error(RouteErrorContext(error: error, routeContext: context))
-    }
-  }
+    for context in contexts {
+      guard let record = recordsByID[context.match.route.id] else { continue }
 
-  func render(_ location: RouteLocation) throws(RouterRenderError) {
-    switch resolve(location) {
-    case .matched:
-      throw RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView
-    case .notFound(let context):
-      notFoundRenderer?(context)
-      throw RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView
-    case .error(let context):
-      if let errorRenderer {
-        errorRenderer(context)
-        throw RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView
+      do throws(RouteValueError) {
+        _ = try record.render(context)
+      } catch {
+        return .error(RouteErrorContext(error: error, routeContext: context))
       }
-      throw RouterRenderError.routeRenderFailed(context.error)
     }
+
+    return .matched(contexts[contexts.count - 1])
   }
 
-  private func findLeafRecord(for location: RouteLocation) -> CompiledRouteRecord? {
+  func render(_ location: RouteLocation) throws(RouterRenderError) -> RouteContent {
+    guard let record = findLeafRecord(for: location) else {
+      let context = RouteNotFoundContext(
+        location: location,
+        query: QueryString.parse(location.queryString)
+      )
+      guard let notFoundRenderer else {
+        throw RouterRenderError.routeNotFound
+      }
+      return notFoundRenderer(context)
+    }
+
+    let matches = matchStack(for: record, location: location)
+    guard !matches.isEmpty else {
+      let context = RouteNotFoundContext(
+        location: location,
+        query: QueryString.parse(location.queryString)
+      )
+      guard let notFoundRenderer else {
+        throw RouterRenderError.routeNotFound
+      }
+      return notFoundRenderer(context)
+    }
+
+    let contexts = routeContexts(for: matches, location: location)
+    let recordsByID = recordsByRouteID()
+    var rendered: RouteContent?
+
+    for context in contexts {
+      guard let record = recordsByID[context.match.route.id] else { continue }
+
+      do throws(RouteValueError) {
+        rendered = try record.render(context)
+      } catch {
+        let errorContext = RouteErrorContext(error: error, routeContext: context)
+        guard let errorRenderer else {
+          throw RouterRenderError.routeRenderFailed(error)
+        }
+        return errorRenderer(errorContext)
+      }
+    }
+
+    guard let rendered else {
+      throw RouterRenderError.routeNotFound
+    }
+    return rendered
+  }
+
+  private func findLeafRecord(for location: RouteLocation) -> CompiledRouteRecord<RouteContent>? {
     for record in records {
       if record.pattern.match(location.path) != nil {
         return record
@@ -95,14 +129,14 @@ public struct RouteTree {
     return nil
   }
 
-  private func matchStack(for leaf: CompiledRouteRecord, location: RouteLocation) -> [RouteMatch] {
-    var recordsByID: [RouteID: CompiledRouteRecord] = [:]
-    for record in records {
-      recordsByID[record.handle.id] = record
-    }
+  private func matchStack(
+    for leaf: CompiledRouteRecord<RouteContent>,
+    location: RouteLocation
+  ) -> [RouteMatch] {
+    let recordsByID = recordsByRouteID()
 
-    var chain: [CompiledRouteRecord] = []
-    var current: CompiledRouteRecord? = leaf
+    var chain: [CompiledRouteRecord<RouteContent>] = []
+    var current: CompiledRouteRecord<RouteContent>? = leaf
     while let record = current {
       chain.append(record)
       if let parent = record.parent {
@@ -125,13 +159,32 @@ public struct RouteTree {
     return matches
   }
 
-  private func combinedParams(from matches: [RouteMatch]) -> RouteParameters {
-    var params = RouteParameters()
-    for match in matches {
-      for (name, value) in match.params.pairs {
-        params.append(name, value)
-      }
+  private func recordsByRouteID() -> [RouteID: CompiledRouteRecord<RouteContent>] {
+    var recordsByID: [RouteID: CompiledRouteRecord<RouteContent>] = [:]
+    for record in records {
+      recordsByID[record.handle.id] = record
     }
-    return params
+    return recordsByID
+  }
+
+  private func routeContexts(for matches: [RouteMatch], location: RouteLocation) -> [RouteContext] {
+    var contexts: [RouteContext] = []
+    contexts.reserveCapacity(matches.count)
+
+    let query = QueryString.parse(location.queryString)
+
+    for match in matches {
+      contexts.append(
+        RouteContext(
+          params: match.params,
+          query: query,
+          location: location,
+          match: match,
+          matches: matches
+        )
+      )
+    }
+
+    return contexts
   }
 }

@@ -1,15 +1,32 @@
 import ElementaryUI
 
+public protocol RouterNavigation: AnyObject {
+  func href(
+    to route: RouteHandle,
+    params: RouteParameters,
+    query: RouteParameters,
+    hash: String
+  ) throws(RouteMatchError) -> String
+
+  func navigate(
+    to route: RouteHandle,
+    params: RouteParameters,
+    query: RouteParameters,
+    hash: String,
+    replace: Bool
+  ) throws(RouteMatchError)
+}
+
 extension EnvironmentValues {
-  @Entry public var router: Router? = nil
+  @Entry public var router: (any RouterNavigation)? = nil
 }
 
 @View
-public struct RouterProvider<Content: View> {
-  let router: Router
+public struct RouterProvider<RouteContent: View, Content: View> {
+  let router: Router<RouteContent>
   let content: Content
 
-  public init(_ router: Router, @HTMLBuilder content: () -> Content) {
+  public init(_ router: Router<RouteContent>, @HTMLBuilder content: () -> Content) {
     self.router = router
     self.content = content()
   }
@@ -20,14 +37,28 @@ public struct RouterProvider<Content: View> {
 }
 
 @View
-public struct RouterView {
-  @Environment(#Key(\.router)) var router
+public struct RouterView<RouteContent: View> {
+  let router: Router<RouteContent>
+  let renderError: (RouterRenderError) -> RouteContent
 
-  public init() {}
+  public init(
+    _ router: Router<RouteContent>,
+    onError renderError: @escaping (RouterRenderError) -> RouteContent
+  ) {
+    self.router = router
+    self.renderError = renderError
+  }
 
   public var body: some View {
-    let _ = try? router?.renderCurrentRoute()
-    EmptyHTML()
+    rendered
+  }
+
+  private var rendered: RouteContent {
+    do {
+      return try router.renderCurrentRoute()
+    } catch {
+      return renderError(error)
+    }
   }
 }
 

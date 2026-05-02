@@ -1,61 +1,58 @@
 import ElementaryUI
 
-public final class RouteCollection {
-  private var records: [RouteRecordBuilder] = []
-  private var notFoundRenderer: ((RouteNotFoundContext) -> Void)?
-  private var errorRenderer: ((RouteErrorContext) -> Void)?
+public final class RouteCollection<RouteContent: View> {
+  private var records: [RouteRecordBuilder<RouteContent>] = []
+  private var notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
+  private var errorRenderer: ((RouteErrorContext) -> RouteContent)?
   private var nextID = 0
 
   public init() {}
 
   @discardableResult
-  public func route<Content: View>(
+  public func route(
     _ path: String,
-    @HTMLBuilder render: @escaping () -> Content
+    @HTMLBuilder render: @escaping () -> RouteContent
   ) -> RouteHandle {
-    let erased: (RouteContext) throws(RouteValueError) -> Void = { _ throws(RouteValueError) in
-      _ = render()
+    let typed: (RouteContext) throws(RouteValueError) -> RouteContent = {
+      _ throws(RouteValueError) in
+      render()
     }
-    return add(path: path, parent: nil, render: erased)
+    return add(path: path, parent: nil, render: typed)
   }
 
   @discardableResult
-  public func route<Content: View>(
+  public func route(
     _ path: String,
-    @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> Content
+    @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    let erased: (RouteContext) throws(RouteValueError) -> Void = {
-      context throws(RouteValueError) in
-      _ = try render(context)
-    }
-    return add(path: path, parent: nil, render: erased)
+    return add(path: path, parent: nil, render: render)
   }
 
-  public func scope(_ path: String) -> RouteScope {
+  public func scope(_ path: String) -> RouteScope<RouteContent> {
     RouteScope(collection: self, prefix: path, parent: nil)
   }
 
-  public func children(of parent: RouteHandle) -> RouteScope {
+  public func children(of parent: RouteHandle) -> RouteScope<RouteContent> {
     guard let record = records.first(where: { $0.handle == parent }) else {
       preconditionFailure("Cannot create child routes for a handle that is not in this collection.")
     }
     return RouteScope(collection: self, prefix: record.path, parent: parent)
   }
 
-  public func notFound<Content: View>(
-    @HTMLBuilder render: @escaping (RouteNotFoundContext) -> Content
+  public func notFound(
+    @HTMLBuilder render: @escaping (RouteNotFoundContext) -> RouteContent
   ) {
-    notFoundRenderer = { context in _ = render(context) }
+    notFoundRenderer = render
   }
 
-  public func error<Content: View>(
-    @HTMLBuilder render: @escaping (RouteErrorContext) -> Content
+  public func error(
+    @HTMLBuilder render: @escaping (RouteErrorContext) -> RouteContent
   ) {
-    errorRenderer = { context in _ = render(context) }
+    errorRenderer = render
   }
 
-  public func freeze() throws(RouteTreeError) -> RouteTree {
-    var compiled: [CompiledRouteRecord] = []
+  public func freeze() throws(RouteTreeError) -> RouteTree<RouteContent> {
+    var compiled: [CompiledRouteRecord<RouteContent>] = []
     var seenPaths: [String] = []
 
     for record in records {
@@ -93,7 +90,7 @@ public final class RouteCollection {
   fileprivate func add(
     path: String,
     parent: RouteHandle?,
-    render: @escaping (RouteContext) throws(RouteValueError) -> Void
+    render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
     let handle = RouteHandle(id: RouteID(rawValue: nextID))
     nextID += 1
@@ -102,41 +99,42 @@ public final class RouteCollection {
   }
 }
 
-public final class RouteScope {
-  private let collection: RouteCollection
+public final class RouteScope<RouteContent: View> {
+  private let collection: RouteCollection<RouteContent>
   private let prefix: String
   private let parent: RouteHandle?
 
-  fileprivate init(collection: RouteCollection, prefix: String, parent: RouteHandle?) {
+  fileprivate init(
+    collection: RouteCollection<RouteContent>,
+    prefix: String,
+    parent: RouteHandle?
+  ) {
     self.collection = collection
     self.prefix = RouteLocation.normalizedPath(prefix)
     self.parent = parent
   }
 
   @discardableResult
-  public func route<Content: View>(
+  public func route(
     _ path: String,
-    @HTMLBuilder render: @escaping () -> Content
+    @HTMLBuilder render: @escaping () -> RouteContent
   ) -> RouteHandle {
-    let erased: (RouteContext) throws(RouteValueError) -> Void = { _ throws(RouteValueError) in
-      _ = render()
+    let typed: (RouteContext) throws(RouteValueError) -> RouteContent = {
+      _ throws(RouteValueError) in
+      render()
     }
-    return collection.add(path: joined(path), parent: parent, render: erased)
+    return collection.add(path: joined(path), parent: parent, render: typed)
   }
 
   @discardableResult
-  public func route<Content: View>(
+  public func route(
     _ path: String,
-    @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> Content
+    @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    let erased: (RouteContext) throws(RouteValueError) -> Void = {
-      context throws(RouteValueError) in
-      _ = try render(context)
-    }
-    return collection.add(path: joined(path), parent: parent, render: erased)
+    return collection.add(path: joined(path), parent: parent, render: render)
   }
 
-  public func scope(_ path: String) -> RouteScope {
+  public func scope(_ path: String) -> RouteScope<RouteContent> {
     RouteScope(collection: collection, prefix: joined(path), parent: parent)
   }
 
@@ -148,16 +146,16 @@ public final class RouteScope {
   }
 }
 
-private struct RouteRecordBuilder {
+private struct RouteRecordBuilder<RouteContent: View> {
   let handle: RouteHandle
   let parent: RouteHandle?
   let path: String
-  let render: (RouteContext) throws(RouteValueError) -> Void
+  let render: (RouteContext) throws(RouteValueError) -> RouteContent
 }
 
-struct CompiledRouteRecord {
+struct CompiledRouteRecord<RouteContent: View> {
   let handle: RouteHandle
   let parent: RouteHandle?
   let pattern: RoutePattern
-  let render: (RouteContext) throws(RouteValueError) -> Void
+  let render: (RouteContext) throws(RouteValueError) -> RouteContent
 }

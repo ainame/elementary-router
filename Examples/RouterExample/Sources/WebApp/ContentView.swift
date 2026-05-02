@@ -1,54 +1,38 @@
 import ElementaryRouter
 import ElementaryUI
 
-final class ExampleRoutes {
-  private let collection = RouteCollection()
-
-  let home: RouteHandle
-  let lang: RouteHandle
-  let profile: RouteHandle
-  let docs: RouteHandle
-
-  init() {
-    home = collection.route("/") {
-      HomePage()
-    }
-
-    lang = collection.route("/:lang") {
-      EmptyHTML()
-    }
-
-    profile = collection.children(of: lang).route("profile/:profileId") {
-      context throws(RouteValueError) in
-      ProfilePage(
-        lang: try context.params.require("lang"),
-        profileID: try context.params.require("profileId", Int.self),
-        tab: context.query.get("tab") ?? "overview"
-      )
-    }
-
-    docs = collection.route("/docs/*") { context in
-      DocsPage(slug: context.params.get("*") ?? "")
-    }
-
-    collection.notFound { context in
-      NotFoundPage(path: context.location.path)
-    }
-
-    collection.error { context in
-      InvalidRoutePage(error: context.error)
-    }
+@Routes
+struct AppRoutes {
+  @Route("/")
+  static func home() -> HomePage {
+    HomePage()
   }
 
-  func freeze() throws(RouteTreeError) -> RouteTree {
-    try collection.freeze()
+  @Route("/:lang/profile/:profileId")
+  static func profile(lang: String, profileId: Int) -> ProfilePage {
+    ProfilePage(lang: lang, profileID: profileId)
+  }
+
+  @Route("/docs/*")
+  static func docs(splat: Wildcard) -> DocsPage {
+    DocsPage(slug: splat.value)
+  }
+
+  @NotFound
+  static func notFound(context: RouteNotFoundContext) -> NotFoundPage {
+    NotFoundPage(path: context.location.path)
+  }
+
+  @RouteError
+  static func routeError(context: RouteErrorContext) -> InvalidRoutePage {
+    InvalidRoutePage(error: context.error)
   }
 }
 
 @View
 struct ContentView {
-  let routes: ExampleRoutes
-  let router: Router
+  let routeSet: AppRoutes.RouteSet
+  let router: Router<AppRoutes.RouteView>
 
   var body: some View {
     RouterProvider(router) {
@@ -56,18 +40,17 @@ struct ContentView {
         header(.style(headerStyle)) {
           h1(.style(titleStyle)) { "ElementaryUI Router" }
           nav(.style(navStyle)) {
-            Link(to: routes.home) {
+            Link(to: routeSet.handles.home) {
               "Home"
             }
             Link(
-              to: routes.profile,
-              params: ["lang": "ja", "profileId": 42],
-              query: ["tab": "posts"]
+              to: routeSet.handles.profile,
+              params: ["lang": "ja", "profileId": 42]
             ) {
               "Profile"
             }
             Link(
-              to: routes.docs,
+              to: routeSet.handles.docs,
               params: ["*": "guide/get-started"],
               hash: "install"
             ) {
@@ -77,7 +60,13 @@ struct ContentView {
         }
 
         main(.style(mainStyle)) {
-          RouterView()
+          RouterView(router) { _ in
+            AppRoutes.RouteView(
+              storage: .notFound(
+                RouteNotFoundContext(location: router.location, query: RouteParameters())
+              )
+            )
+          }
         }
       }
     }
@@ -100,7 +89,6 @@ struct HomePage {
 struct ProfilePage {
   let lang: String
   let profileID: Int
-  let tab: String
 
   var body: some View {
     section(.style(panelStyle)) {
@@ -110,8 +98,6 @@ struct ProfilePage {
         dd { lang }
         dt { "profileId" }
         dd { "\(profileID)" }
-        dt { "tab" }
-        dd { tab }
       }
     }
   }

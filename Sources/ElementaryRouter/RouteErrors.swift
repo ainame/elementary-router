@@ -9,6 +9,6 @@ public enum RouteMatchError: Error, Equatable, Sendable {
 }
 
 public enum RouterRenderError: Error, Equatable, Sendable {
-  case unavailableUntilElementaryUIExposesTypeErasedView
+  case routeNotFound
   case routeRenderFailed(RouteValueError)
 }
