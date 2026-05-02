@@ -1,3 +1,4 @@
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
@@ -10,38 +11,95 @@ public enum RoutesMacro: MemberMacro {
     in context: some MacroExpansionContext
   ) throws -> [DeclSyntax] {
     guard let structDeclaration = declaration.as(StructDeclSyntax.self) else {
+      context.diagnose(
+        .init(node: Syntax(declaration), message: RoutesDiagnostic.routesRequiresStruct)
+      )
       return []
     }
 
     let containerName = structDeclaration.name.text
     let access = declaration.accessModifier
-    let routes = declaration.memberBlock.members.compactMap { member -> RouteDeclaration? in
-      guard let function = member.decl.as(FunctionDeclSyntax.self),
-        let path = function.stringLiteralArgument(forAttributeNamed: "Route")
-      else {
-        return nil
+    var routes: [RouteDeclaration] = []
+    var notFound: FunctionDeclSyntax?
+    var routeError: FunctionDeclSyntax?
+    var seenPaths: [String] = []
+
+    for member in declaration.memberBlock.members {
+      guard let function = member.decl.as(FunctionDeclSyntax.self) else {
+        let text = member.decl.trimmedDescription
+        if text.contains("@Route")
+          || text.contains("@NotFound")
+          || text.contains("@RouteError")
+        {
+          context.diagnose(
+            .init(node: Syntax(member.decl), message: RoutesDiagnostic.routeRequiresStaticFunction)
+          )
+        }
+        continue
       }
 
-      return RouteDeclaration(function: function, path: path)
+      if function.hasAttribute(named: "Route") {
+        guard function.isStatic else {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
+          )
+          continue
+        }
+
+        guard let path = function.stringLiteralArgument(forAttributeNamed: "Route") else {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStringLiteral)
+          )
+          continue
+        }
+
+        let route = RouteDeclaration(function: function, path: path)
+        validate(route: route, context: context)
+
+        if seenPaths.contains(route.normalizedPath) {
+          context.diagnose(
+            .init(
+              node: Syntax(function),
+              message: RoutesDiagnostic.duplicateRoute(path: route.normalizedPath)
+            )
+          )
+        }
+        seenPaths.append(route.normalizedPath)
+        routes.append(route)
+      }
+
+      if function.hasAttribute(named: "NotFound") {
+        guard function.isStatic else {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
+          )
+          continue
+        }
+        if notFound != nil {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.duplicateNotFound)
+          )
+        } else {
+          notFound = function
+        }
+      }
+
+      if function.hasAttribute(named: "RouteError") {
+        guard function.isStatic else {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
+          )
+          continue
+        }
+        if routeError != nil {
+          context.diagnose(
+            .init(node: Syntax(function), message: RoutesDiagnostic.duplicateRouteError)
+          )
+        } else {
+          routeError = function
+        }
+      }
     }
-
-    let notFound = declaration.memberBlock.members.compactMap { member -> FunctionDeclSyntax? in
-      guard let function = member.decl.as(FunctionDeclSyntax.self),
-        function.hasAttribute(named: "NotFound")
-      else {
-        return nil
-      }
-      return function
-    }.first
-
-    let routeError = declaration.memberBlock.members.compactMap { member -> FunctionDeclSyntax? in
-      guard let function = member.decl.as(FunctionDeclSyntax.self),
-        function.hasAttribute(named: "RouteError")
-      else {
-        return nil
-      }
-      return function
-    }.first
 
     return [
       DeclSyntax(
@@ -54,7 +112,7 @@ public enum RoutesMacro: MemberMacro {
         )
       ),
       DeclSyntax(stringLiteral: handlesDeclaration(access: access, routes: routes)),
-      DeclSyntax(stringLiteral: routeSetDeclaration(access: access)),
+      DeclSyntax(stringLiteral: routeSetDeclaration(access: access, routes: routes)),
       DeclSyntax(
         stringLiteral: routesFunctionDeclaration(
           access: access,
@@ -79,6 +137,18 @@ private struct RouteDeclaration {
     function.signature.parameterClause.parameters.map { RouteParameter(parameter: $0) }
   }
 
+  var storageParameters: [RouteParameter] {
+    parameters.filter { $0.kind != .context }
+  }
+
+  var pathStorageParameters: [RouteParameter] {
+    storageParameters.filter { $0.kind == .path }
+  }
+
+  var queryParameters: [RouteParameter] {
+    storageParameters.filter { $0.kind == .query }
+  }
+
   var pathParameters: [String] {
     RoutePath(path).parameters
   }
@@ -86,29 +156,82 @@ private struct RouteDeclaration {
   var hasWildcard: Bool {
     RoutePath(path).hasWildcard
   }
+
+  var normalizedPath: String {
+    RoutePath(path).normalized
+  }
 }
 
 private struct RouteParameter {
+  enum Kind {
+    case path
+    case query
+    case wildcard
+    case context
+  }
+
   let label: String
   let type: String
+  let defaultValue: String?
 
   init(parameter: FunctionParameterSyntax) {
     self.label = parameter.firstName.text
     self.type = parameter.type.trimmedDescription
+    self.defaultValue = parameter.defaultValue?.value.trimmedDescription
+  }
+
+  var kind: Kind {
+    if type == "RouteContext" {
+      return .context
+    }
+    if type == "Wildcard" {
+      return .wildcard
+    }
+    if queryValueType != nil {
+      return .query
+    }
+    return .path
+  }
+
+  var queryValueType: String? {
+    guard type.hasPrefix("Query<"), type.hasSuffix(">") else {
+      return nil
+    }
+    return String(type.dropFirst("Query<".count).dropLast())
   }
 
   var storageType: String {
-    if type == "Wildcard" {
+    if kind == .wildcard {
       return "String"
+    }
+    if let queryValueType {
+      return queryValueType
     }
     return type
   }
 
   var callArgument: String {
-    if type == "Wildcard" {
+    switch kind {
+    case .context:
+      return "\(label): context"
+    case .wildcard:
       return "\(label): Wildcard(\(label))"
+    case .query:
+      return "\(label): Query(\(label))"
+    case .path:
+      return "\(label): \(label)"
     }
-    return "\(label): \(label)"
+  }
+
+  var queryDefaultValue: String? {
+    guard kind == .query, let defaultValue else {
+      return nil
+    }
+
+    if defaultValue.hasPrefix("Query("), defaultValue.hasSuffix(")") {
+      return String(defaultValue.dropFirst("Query(".count).dropLast())
+    }
+    return defaultValue
   }
 }
 
@@ -132,6 +255,52 @@ private struct RoutePath {
   var hasWildcard: Bool {
     value.split(separator: "/").contains("*")
   }
+
+  var normalized: String {
+    var result = value
+    if result.isEmpty || result.first != "/" {
+      result = "/" + result
+    }
+    while result.count > 1 && result.last == "/" {
+      result.removeLast()
+    }
+    return result
+  }
+}
+
+private func validate(route: RouteDeclaration, context: some MacroExpansionContext) {
+  let pathParameters = route.pathParameters
+  let pathParameterNames = route.pathStorageParameters.map(\.label)
+
+  for name in pathParameters where !pathParameterNames.contains(name) {
+    context.diagnose(
+      .init(
+        node: Syntax(route.function),
+        message: RoutesDiagnostic.missingPathParameter(name: name)
+      )
+    )
+  }
+
+  for parameter in route.pathStorageParameters where !pathParameters.contains(parameter.label) {
+    context.diagnose(
+      .init(
+        node: Syntax(route.function),
+        message: RoutesDiagnostic.extraPathParameter(name: parameter.label)
+      )
+    )
+  }
+
+  let wildcardParameters = route.storageParameters.filter { $0.kind == .wildcard }
+  if route.hasWildcard && wildcardParameters.count != 1 {
+    context.diagnose(
+      .init(node: Syntax(route.function), message: RoutesDiagnostic.wildcardRequiresParameter)
+    )
+  }
+  if !route.hasWildcard && !wildcardParameters.isEmpty {
+    context.diagnose(
+      .init(node: Syntax(route.function), message: RoutesDiagnostic.unexpectedWildcardParameter)
+    )
+  }
 }
 
 private func routeViewDeclaration(
@@ -142,7 +311,8 @@ private func routeViewDeclaration(
   routeError: FunctionDeclSyntax?
 ) -> String {
   let cases = routes.map { route in
-    let values = route.parameters.map { "\($0.label): \($0.storageType)" }.joined(separator: ", ")
+    let values = route.storageParameters.map { "\($0.label): \($0.storageType)" }
+      .joined(separator: ", ")
     return values.isEmpty ? "case \(route.name)" : "case \(route.name)(\(values))"
   }
 
@@ -150,7 +320,7 @@ private func routeViewDeclaration(
   let errorCase = routeError == nil ? [] : ["case routeError(RouteErrorContext)"]
 
   let switchCases = routes.map { route in
-    let parameters = route.parameters
+    let parameters = route.storageParameters
     if parameters.isEmpty {
       return """
               case .\(route.name):
@@ -218,18 +388,24 @@ private func handlesDeclaration(access: String, routes: [RouteDeclaration]) -> S
     """
 }
 
-private func routeSetDeclaration(access: String) -> String {
-  """
-    \(access)struct RouteSet {
-      \(access)let tree: RouteTree<RouteView>
-      \(access)let handles: Handles
+private func routeSetDeclaration(access: String, routes: [RouteDeclaration]) -> String {
+  let hrefs = routes.map { hrefFunctionDeclaration(access: access, route: $0) }.joined(
+    separator: "\n\n"
+  )
 
-      \(access)init(tree: RouteTree<RouteView>, handles: Handles) {
-        self.tree = tree
-        self.handles = handles
+  return """
+      \(access)struct RouteSet {
+        \(access)let tree: RouteTree<RouteView>
+        \(access)let handles: Handles
+
+        \(access)init(tree: RouteTree<RouteView>, handles: Handles) {
+          self.tree = tree
+          self.handles = handles
+        }
+
+      \(hrefs)
       }
-    }
-  """
+    """
 }
 
 private func routesFunctionDeclaration(
@@ -274,12 +450,24 @@ private func routesFunctionDeclaration(
 }
 
 private func routeRegistration(_ route: RouteDeclaration) -> String {
-  let storageArguments = route.parameters.map { parameter in
-    if parameter.type == "Wildcard" {
+  let storageArguments = route.storageParameters.map { parameter in
+    switch parameter.kind {
+    case .context:
+      return "\(parameter.label): context"
+    case .wildcard:
       return "\(parameter.label): try context.params.require(\"*\", String.self)"
+    case .query:
+      let valueType = parameter.queryValueType ?? parameter.storageType
+      let parsed = "context.query.get(\"\(parameter.label)\", \(valueType).self)"
+      if let defaultValue = parameter.queryDefaultValue {
+        return "\(parameter.label): \(parsed) ?? \(defaultValue)"
+      }
+      return
+        "\(parameter.label): try context.query.require(\"\(parameter.label)\", \(valueType).self)"
+    case .path:
+      return
+        "\(parameter.label): try context.params.require(\"\(parameter.label)\", \(parameter.type).self)"
     }
-    return
-      "\(parameter.label): try context.params.require(\"\(parameter.label)\", \(parameter.type).self)"
   }.joined(separator: ", ")
 
   if route.parameters.isEmpty {
@@ -297,6 +485,58 @@ private func routeRegistration(_ route: RouteDeclaration) -> String {
     """
 }
 
+private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) -> String {
+  let pathParameters = route.storageParameters.filter {
+    $0.kind == .path || $0.kind == .wildcard
+  }
+  let queryParameters = route.queryParameters
+
+  let parameters = (pathParameters + queryParameters).map { parameter in
+    if parameter.kind == .query, parameter.queryDefaultValue != nil {
+      return "\(parameter.label): \(parameter.storageType)? = nil"
+    }
+    return "\(parameter.label): \(parameter.storageType)"
+  }
+
+  let signatureParameters = (parameters + ["hash: String = \"\""]).joined(separator: ", ")
+
+  let pathPairs = pathParameters.map { parameter in
+    let key = parameter.kind == .wildcard ? "*" : parameter.label
+    return "(\"\(key)\", RouteValueLiteral(\(parameter.label)))"
+  }.joined(separator: ", ")
+
+  let queryBuilder: String
+  if queryParameters.isEmpty {
+    queryBuilder = "let query = RouteParameters()"
+  } else {
+    let lines = queryParameters.map { parameter in
+      if parameter.queryDefaultValue != nil {
+        return """
+              if let \(parameter.label) {
+                query = query.set("\(parameter.label)", \(parameter.label))
+              }
+          """
+      }
+      return """
+            query = query.set("\(parameter.label)", \(parameter.label))
+        """
+    }.joined(separator: "\n")
+
+    queryBuilder = """
+        var query = RouteParameters()
+        \(lines)
+      """
+  }
+
+  return """
+      \(access)func \(route.name)Href(\(signatureParameters)) throws(RouteMatchError) -> String {
+        let params = RouteParameters(\(pathPairs))
+        \(queryBuilder)
+        return try tree.href(to: handles.\(route.name), params: params, query: query, hash: hash)
+      }
+    """
+}
+
 extension DeclGroupSyntax {
   fileprivate var accessModifier: String {
     for modifier in modifiers {
@@ -310,6 +550,12 @@ extension DeclGroupSyntax {
 }
 
 extension FunctionDeclSyntax {
+  fileprivate var isStatic: Bool {
+    modifiers.contains { modifier in
+      modifier.name.text == "static"
+    }
+  }
+
   fileprivate func hasAttribute(named expectedName: String) -> Bool {
     attributes.contains { element in
       guard case .attribute(let attribute) = element else {
@@ -344,5 +590,51 @@ extension FunctionDeclSyntax {
 extension SyntaxProtocol {
   fileprivate var trimmedDescription: String {
     trimmed.description
+  }
+}
+
+private enum RoutesDiagnostic: DiagnosticMessage {
+  case routesRequiresStruct
+  case routeRequiresStaticFunction
+  case routeRequiresStringLiteral
+  case missingPathParameter(name: String)
+  case extraPathParameter(name: String)
+  case wildcardRequiresParameter
+  case unexpectedWildcardParameter
+  case duplicateRoute(path: String)
+  case duplicateNotFound
+  case duplicateRouteError
+
+  var message: String {
+    switch self {
+    case .routesRequiresStruct:
+      "`@Routes` can only be attached to a struct."
+    case .routeRequiresStaticFunction:
+      "Route declarations must be static functions."
+    case .routeRequiresStringLiteral:
+      "`@Route` requires a string literal path."
+    case .missingPathParameter(let name):
+      "Missing function parameter for path parameter `\(name)`."
+    case .extraPathParameter(let name):
+      "Function parameter `\(name)` does not appear in the route path."
+    case .wildcardRequiresParameter:
+      "Wildcard routes must declare exactly one `Wildcard` parameter."
+    case .unexpectedWildcardParameter:
+      "`Wildcard` parameters are only valid on routes whose path contains `*`."
+    case .duplicateRoute(let path):
+      "Duplicate route path `\(path)`."
+    case .duplicateNotFound:
+      "`@Routes` can only declare one `@NotFound` function."
+    case .duplicateRouteError:
+      "`@Routes` can only declare one `@RouteError` function."
+    }
+  }
+
+  var diagnosticID: MessageID {
+    MessageID(domain: "ElementaryRouterMacros", id: "\(self)")
+  }
+
+  var severity: DiagnosticSeverity {
+    .error
   }
 }

@@ -13,3 +13,9 @@ public struct Query<Value: RouteValue>: Equatable, Sendable where Value: Equatab
     self.value = value
   }
 }
+
+extension Query where Value == String {
+  public init(stringLiteral value: String) {
+    self.value = value
+  }
+}

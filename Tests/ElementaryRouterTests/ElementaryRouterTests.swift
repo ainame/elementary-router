@@ -11,7 +11,7 @@ struct MacroRoutes {
   }
 
   @Route("/users/:id")
-  static func user(id: Int) -> EmptyHTML {
+  static func user(id: Int, tab: Query<String> = Query("overview")) -> EmptyHTML {
     EmptyHTML()
   }
 
@@ -37,8 +37,10 @@ struct MacroRoutes {
 
   #expect(router.currentMatch?.route == routeSet.handles.user)
   #expect(router.currentMatch?.params.get("id") == "42")
+  #expect(try routeSet.userHref(id: 42) == "/users/42")
+  #expect(try routeSet.userHref(id: 42, tab: "posts") == "/users/42?tab=posts")
   #expect(
-    try router.href(to: routeSet.handles.file, params: ["*": "docs/readme"]) == "/files/docs/readme"
+    try routeSet.fileHref(splat: "docs/readme", hash: "install") == "/files/docs/readme#install"
   )
 }
 

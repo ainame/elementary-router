@@ -36,7 +36,11 @@ let package = Package(
     ),
     .testTarget(
       name: "ElementaryRouterTests",
-      dependencies: ["ElementaryRouter"]
+      dependencies: [
+        "ElementaryRouter",
+        "ElementaryRouterMacros",
+        .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
+      ]
     ),
   ],
   swiftLanguageModes: [.v6]
