@@ -30,6 +30,8 @@ npm run build
 
 The example declares routes with `@Routes`. The macro generates `AppRoutes.RouteView`, `AppRoutes.RouteSet`, and route handles for `Link` and programmatic navigation.
 
+`/:lang` is declared as a typed `@Layout` route, and `/:lang/profile/:profileId` is rendered through that layout with `Outlet<Content>`.
+
 Fallback policy is declared with `@NotFound` and `@RouteError`, so route fallback selection does not live inside a page view body.
 
 `RouterView(router)` renders the selected route through the macro-generated typed route view. This keeps the example on upstream ElementaryUI without a vendored `AnyView` spike.

@@ -169,4 +169,6 @@ Embedded Swift まで含めて ElementaryUI の機能をフルサポートする
 
 この方式なら `RouterView` は `RouteContent: View` を返すだけでよく、ElementaryUI に大きな type erasure API を要求せずに upstream ElementaryUI のまま進められる。vendor の `AnyView` spike は最終実装に残さない。
 
+実装ではこの方針に移行した。`@Routes` が `RouteView` / `RouteSet` / route handles / href helpers を生成し、`@Layout` は `Outlet<Content>` を受け取る generic layout function として扱う。これにより nested layout も runtime erase せず、leaf view を layout function で静的に包める。
+
 中長期的に ElementaryUI 側で `AnyView` または同等の type-erased child view abstraction を正式に設計する価値は残る。ただし router の初期 API は、それに依存しない typed macro 方式を優先する。
