@@ -1,183 +1,184 @@
 import ElementaryUI
 import Testing
+
 @testable import ElementaryUIRouter
 
 @Test func routeParametersExtractsStringsAndTypedValues() throws {
-    let values: RouteParameters = ["lang": "ja", "profileId": 42]
+  let values: RouteParameters = ["lang": "ja", "profileId": 42]
 
-    #expect(try values.require("lang") == "ja")
-    #expect(try values.require("profileId", Int.self) == 42)
-    #expect(values.get("profileId") == "42")
-    #expect(values.get("profileId", Int.self) == 42)
+  #expect(try values.require("lang") == "ja")
+  #expect(try values.require("profileId", Int.self) == 42)
+  #expect(values.get("profileId") == "42")
+  #expect(values.get("profileId", Int.self) == 42)
 }
 
 @Test func routeParametersSupportsInitializerLists() throws {
-    let values = RouteParameters(("lang", "ja"), ("profileId", 42), ("enabled", true))
+  let values = RouteParameters(("lang", "ja"), ("profileId", 42), ("enabled", true))
 
-    #expect(try values.require("lang") == "ja")
-    #expect(try values.require("profileId", Int.self) == 42)
-    #expect(try values.require("enabled", Bool.self))
+  #expect(try values.require("lang") == "ja")
+  #expect(try values.require("profileId", Int.self) == 42)
+  #expect(try values.require("enabled", Bool.self))
 }
 
 @Test func routeParametersReportsMissingAndInvalidValues() {
-    let values: RouteParameters = ["profileId": "abc"]
+  let values: RouteParameters = ["profileId": "abc"]
 
-    #expect(throws: RouteValueError.missing(name: "lang")) {
-        try values.require("lang")
-    }
+  #expect(throws: RouteValueError.missing(name: "lang")) {
+    try values.require("lang")
+  }
 
-    #expect(throws: RouteValueError.invalid(name: "profileId", rawValue: "abc", expected: "Int")) {
-        try values.require("profileId", Int.self)
-    }
+  #expect(throws: RouteValueError.invalid(name: "profileId", rawValue: "abc", expected: "Int")) {
+    try values.require("profileId", Int.self)
+  }
 }
 
 @Test func queryStringParsesMultiValueAndPlusAsSpace() {
-    let values = QueryString.parse("?tag=swift&tag=wasm&q=hello+world&encoded=a%2Fb")
+  let values = QueryString.parse("?tag=swift&tag=wasm&q=hello+world&encoded=a%2Fb")
 
-    #expect(values.all("tag") == ["swift", "wasm"])
-    #expect(values.get("q") == "hello world")
-    #expect(values.get("encoded") == "a/b")
+  #expect(values.all("tag") == ["swift", "wasm"])
+  #expect(values.get("q") == "hello world")
+  #expect(values.get("encoded") == "a/b")
 }
 
 @Test func queryStringStringifiesValuesInInsertionOrder() {
-    let values = RouteParameters()
-        .append("tag", "swift")
-        .append("tag", "wasm")
-        .set("q", "hello world")
+  let values = RouteParameters()
+    .append("tag", "swift")
+    .append("tag", "wasm")
+    .set("q", "hello world")
 
-    #expect(QueryString.stringify(values) == "tag=swift&tag=wasm&q=hello+world")
+  #expect(QueryString.stringify(values) == "tag=swift&tag=wasm&q=hello+world")
 }
 
 @Test func matcherPrefersStaticRoutesOverDynamicRoutes() throws {
-    let routes = RouteCollection()
-    let user = routes.route("/users/:id") { EmptyHTML() }
-    let newUser = routes.route("/users/new") { EmptyHTML() }
-    let tree = try routes.freeze()
+  let routes = RouteCollection()
+  let user = routes.route("/users/:id") { EmptyHTML() }
+  let newUser = routes.route("/users/new") { EmptyHTML() }
+  let tree = try routes.freeze()
 
-    #expect(tree.match(RouteLocation(url: "/users/new"))?.route == newUser)
+  #expect(tree.match(RouteLocation(url: "/users/new"))?.route == newUser)
 
-    let match = tree.match(RouteLocation(url: "/users/42"))
-    #expect(match?.route == user)
-    #expect(match?.params.get("id") == "42")
+  let match = tree.match(RouteLocation(url: "/users/42"))
+  #expect(match?.route == user)
+  #expect(match?.params.get("id") == "42")
 }
 
 @Test func matcherSupportsWildcardRoutes() throws {
-    let routes = RouteCollection()
-    let files = routes.route("/files/*") { EmptyHTML() }
-    let tree = try routes.freeze()
+  let routes = RouteCollection()
+  let files = routes.route("/files/*") { EmptyHTML() }
+  let tree = try routes.freeze()
 
-    let match = tree.match(RouteLocation(url: "/files/docs/readme"))
-    #expect(match?.route == files)
-    #expect(match?.params.get("*") == "docs/readme")
+  let match = tree.match(RouteLocation(url: "/files/docs/readme"))
+  #expect(match?.route == files)
+  #expect(match?.params.get("*") == "docs/readme")
 }
 
 @Test func routeTreeBuildsHrefFromParamsAndQuery() throws {
-    let routes = RouteCollection()
-    let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
-    let tree = try routes.freeze()
+  let routes = RouteCollection()
+  let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
+  let tree = try routes.freeze()
 
-    let href = try tree.href(
-        to: profile,
-        params: ["lang": "ja", "profileId": 42],
-        query: ["tab": "posts"]
-    )
+  let href = try tree.href(
+    to: profile,
+    params: ["lang": "ja", "profileId": 42],
+    query: ["tab": "posts"]
+  )
 
-    #expect(href == "/ja/profile/42?tab=posts")
+  #expect(href == "/ja/profile/42?tab=posts")
 }
 
 @Test func memoryHistoryPushReplaceAndGoNotifyListeners() {
-    let history = MemoryHistory(initialPath: "/")
-    var updates: [HistoryUpdate] = []
-    let subscription = history.listen { updates.append($0) }
+  let history = MemoryHistory(initialPath: "/")
+  var updates: [HistoryUpdate] = []
+  let subscription = history.listen { updates.append($0) }
 
-    history.push(RouteLocation(url: "/a"))
-    history.push(RouteLocation(url: "/b"))
-    history.replace(RouteLocation(url: "/c"))
-    history.go(-1)
-    subscription.cancel()
+  history.push(RouteLocation(url: "/a"))
+  history.push(RouteLocation(url: "/b"))
+  history.replace(RouteLocation(url: "/c"))
+  history.go(-1)
+  subscription.cancel()
 
-    #expect(history.location.href == "/a")
-    #expect(updates.map(\.action) == [.push, .push, .replace, .pop])
-    #expect(updates.map(\.location.href) == ["/a", "/b", "/c", "/a"])
+  #expect(history.location.href == "/a")
+  #expect(updates.map(\.action) == [.push, .push, .replace, .pop])
+  #expect(updates.map(\.location.href) == ["/a", "/b", "/c", "/a"])
 }
 
 @Test func routerNavigateUpdatesLocationAndMatches() throws {
-    let routes = RouteCollection()
-    let home = routes.route("/") { EmptyHTML() }
-    let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
-    let tree = try routes.freeze()
-    let history = MemoryHistory(initialPath: "/")
-    let router = Router(routes: tree, history: history)
+  let routes = RouteCollection()
+  let home = routes.route("/") { EmptyHTML() }
+  let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
+  let tree = try routes.freeze()
+  let history = MemoryHistory(initialPath: "/")
+  let router = Router(routes: tree, history: history)
 
-    #expect(router.currentMatch?.route == home)
+  #expect(router.currentMatch?.route == home)
 
-    try router.navigate(
-        to: profile,
-        params: ["lang": "ja", "profileId": 42],
-        query: ["tab": "posts"]
-    )
+  try router.navigate(
+    to: profile,
+    params: ["lang": "ja", "profileId": 42],
+    query: ["tab": "posts"]
+  )
 
-    #expect(router.location.href == "/ja/profile/42?tab=posts")
-    #expect(router.currentMatch?.route == profile)
-    #expect(router.currentMatch?.params.get("lang") == "ja")
-    #expect(router.location.queryString == "tab=posts")
+  #expect(router.location.href == "/ja/profile/42?tab=posts")
+  #expect(router.currentMatch?.route == profile)
+  #expect(router.currentMatch?.params.get("lang") == "ja")
+  #expect(router.location.queryString == "tab=posts")
 }
 
 @Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
-    let routes = RouteCollection()
-    routes.route("/") { EmptyHTML() }
-    var notFoundPath = ""
-    func captureNotFound(_ context: RouteNotFoundContext) -> EmptyHTML {
-        notFoundPath = context.location.path
-        return EmptyHTML()
-    }
-    routes.notFound { context in
-        captureNotFound(context)
-    }
-    let tree = try routes.freeze()
+  let routes = RouteCollection()
+  routes.route("/") { EmptyHTML() }
+  var notFoundPath = ""
+  func captureNotFound(_ context: RouteNotFoundContext) -> EmptyHTML {
+    notFoundPath = context.location.path
+    return EmptyHTML()
+  }
+  routes.notFound { context in
+    captureNotFound(context)
+  }
+  let tree = try routes.freeze()
 
-    if case let .notFound(context) = tree.resolve(RouteLocation(url: "/missing?q=swift")) {
-        #expect(context.location.path == "/missing")
-        #expect(context.query.get("q") == "swift")
-    } else {
-        Issue.record("Expected notFound resolution")
-    }
+  if case .notFound(let context) = tree.resolve(RouteLocation(url: "/missing?q=swift")) {
+    #expect(context.location.path == "/missing")
+    #expect(context.query.get("q") == "swift")
+  } else {
+    Issue.record("Expected notFound resolution")
+  }
 
-    #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
-        try tree.render(RouteLocation(url: "/missing"))
-    }
-    #expect(notFoundPath == "/missing")
+  #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
+    try tree.render(RouteLocation(url: "/missing"))
+  }
+  #expect(notFoundPath == "/missing")
 }
 
 @Test func routeTreeResolvesRouteValueErrorsThroughRoutePolicy() throws {
-    let routes = RouteCollection()
-    func requireProfileID(_ context: RouteContext) throws(RouteValueError) -> EmptyHTML {
-        _ = try context.params.require("profileId", Int.self)
-        return EmptyHTML()
-    }
-    routes.route("/profile/:profileId") { context throws(RouteValueError) in
-        try requireProfileID(context)
-    }
-    var renderedError: RouteValueError?
-    func captureError(_ context: RouteErrorContext) -> EmptyHTML {
-        renderedError = context.error
-        return EmptyHTML()
-    }
-    routes.error { context in
-        captureError(context)
-    }
-    let tree = try routes.freeze()
-    let expected = RouteValueError.invalid(name: "profileId", rawValue: "abc", expected: "Int")
+  let routes = RouteCollection()
+  func requireProfileID(_ context: RouteContext) throws(RouteValueError) -> EmptyHTML {
+    _ = try context.params.require("profileId", Int.self)
+    return EmptyHTML()
+  }
+  routes.route("/profile/:profileId") { context throws(RouteValueError) in
+    try requireProfileID(context)
+  }
+  var renderedError: RouteValueError?
+  func captureError(_ context: RouteErrorContext) -> EmptyHTML {
+    renderedError = context.error
+    return EmptyHTML()
+  }
+  routes.error { context in
+    captureError(context)
+  }
+  let tree = try routes.freeze()
+  let expected = RouteValueError.invalid(name: "profileId", rawValue: "abc", expected: "Int")
 
-    if case let .error(context) = tree.resolve(RouteLocation(url: "/profile/abc")) {
-        #expect(context.error == expected)
-        #expect(context.routeContext.match.params.get("profileId") == "abc")
-    } else {
-        Issue.record("Expected error resolution")
-    }
+  if case .error(let context) = tree.resolve(RouteLocation(url: "/profile/abc")) {
+    #expect(context.error == expected)
+    #expect(context.routeContext.match.params.get("profileId") == "abc")
+  } else {
+    Issue.record("Expected error resolution")
+  }
 
-    #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
-        try tree.render(RouteLocation(url: "/profile/abc"))
-    }
-    #expect(renderedError == expected)
+  #expect(throws: RouterRenderError.unavailableUntilElementaryUIExposesTypeErasedView) {
+    try tree.render(RouteLocation(url: "/profile/abc"))
+  }
+  #expect(renderedError == expected)
 }

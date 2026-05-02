@@ -1,67 +1,72 @@
 public struct RouteID: Hashable, Equatable, Sendable {
-    let rawValue: Int
+  let rawValue: Int
 
-    public init(rawValue: Int) {
-        self.rawValue = rawValue
-    }
+  public init(rawValue: Int) {
+    self.rawValue = rawValue
+  }
 }
 
 public struct RouteHandle: Hashable, Equatable, Sendable {
-    public let id: RouteID
+  public let id: RouteID
 
-    public init(id: RouteID) {
-        self.id = id
-    }
+  public init(id: RouteID) {
+    self.id = id
+  }
 }
 
 public struct RouteMatch: Equatable, Sendable {
-    public let route: RouteHandle
-    public let path: String
-    public let params: RouteParameters
+  public let route: RouteHandle
+  public let path: String
+  public let params: RouteParameters
 
-    public init(route: RouteHandle, path: String, params: RouteParameters) {
-        self.route = route
-        self.path = path
-        self.params = params
-    }
+  public init(route: RouteHandle, path: String, params: RouteParameters) {
+    self.route = route
+    self.path = path
+    self.params = params
+  }
 }
 
 public struct RouteContext: Sendable {
-    public let params: RouteParameters
-    public let query: RouteParameters
-    public let location: RouteLocation
-    public let match: RouteMatch
+  public let params: RouteParameters
+  public let query: RouteParameters
+  public let location: RouteLocation
+  public let match: RouteMatch
 
-    public init(params: RouteParameters, query: RouteParameters, location: RouteLocation, match: RouteMatch) {
-        self.params = params
-        self.query = query
-        self.location = location
-        self.match = match
-    }
+  public init(
+    params: RouteParameters,
+    query: RouteParameters,
+    location: RouteLocation,
+    match: RouteMatch
+  ) {
+    self.params = params
+    self.query = query
+    self.location = location
+    self.match = match
+  }
 }
 
 public struct RouteNotFoundContext: Sendable {
-    public let location: RouteLocation
-    public let query: RouteParameters
+  public let location: RouteLocation
+  public let query: RouteParameters
 
-    public init(location: RouteLocation, query: RouteParameters) {
-        self.location = location
-        self.query = query
-    }
+  public init(location: RouteLocation, query: RouteParameters) {
+    self.location = location
+    self.query = query
+  }
 }
 
 public struct RouteErrorContext: Sendable {
-    public let error: RouteValueError
-    public let routeContext: RouteContext
+  public let error: RouteValueError
+  public let routeContext: RouteContext
 
-    public init(error: RouteValueError, routeContext: RouteContext) {
-        self.error = error
-        self.routeContext = routeContext
-    }
+  public init(error: RouteValueError, routeContext: RouteContext) {
+    self.error = error
+    self.routeContext = routeContext
+  }
 }
 
 public enum RouteRenderResolution: Sendable {
-    case matched(RouteContext)
-    case notFound(RouteNotFoundContext)
-    case error(RouteErrorContext)
+  case matched(RouteContext)
+  case notFound(RouteNotFoundContext)
+  case error(RouteErrorContext)
 }
