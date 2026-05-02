@@ -6,6 +6,33 @@ public enum NavigationState: Equatable, Sendable {
   case navigating
 }
 
+public struct ActiveMatchOptions: Equatable, Sendable {
+  public var includeDescendants: Bool
+  public var params: RouteParameters?
+  public var query: RouteParameters?
+  public var hash: String?
+
+  public init(
+    includeDescendants: Bool = false,
+    params: RouteParameters? = nil,
+    query: RouteParameters? = nil,
+    hash: String? = nil
+  ) {
+    self.includeDescendants = includeDescendants
+    self.params = params
+    self.query = query
+    self.hash = hash
+  }
+
+  public static var exact: Self {
+    Self()
+  }
+
+  public static var descendant: Self {
+    Self(includeDescendants: true)
+  }
+}
+
 @Reactive
 public final class RouterState {
   public private(set) var location: RouteLocation
@@ -115,8 +142,38 @@ public final class Router<RouteContent: View> {
     history.go(1)
   }
 
-  public func isActive(_ route: RouteHandle) -> Bool {
-    currentMatch?.route == route
+  public func isActive(
+    _ route: RouteHandle,
+    options: ActiveMatchOptions = .exact
+  ) -> Bool {
+    let matchedRoute =
+      options.includeDescendants
+      ? matches.first { $0.route == route }
+      : currentMatch.flatMap { $0.route == route ? $0 : nil }
+
+    guard let match = matchedRoute else {
+      return false
+    }
+
+    if let expectedParams = options.params,
+      !match.params.containsAll(expectedParams)
+    {
+      return false
+    }
+
+    if let expectedQuery = options.query,
+      !QueryString.parse(location.queryString).containsAll(expectedQuery)
+    {
+      return false
+    }
+
+    if let expectedHash = options.hash,
+      RouteLocation.trimmedHash(expectedHash) != location.hash
+    {
+      return false
+    }
+
+    return true
   }
 
   public func resolveCurrentRoute() -> RouteRenderResolution {

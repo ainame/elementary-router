@@ -15,6 +15,11 @@ public protocol RouterNavigation: AnyObject {
     hash: String,
     replace: Bool
   ) throws(RouteMatchError)
+
+  func isActive(
+    _ route: RouteHandle,
+    options: ActiveMatchOptions
+  ) -> Bool
 }
 
 extension EnvironmentValues {
@@ -71,6 +76,7 @@ public struct Link<Content: View> {
   let query: RouteParameters
   let hash: String
   let replace: Bool
+  let target: HTMLAttributeValue.Target?
   let content: Content
 
   public init(
@@ -79,6 +85,7 @@ public struct Link<Content: View> {
     query: RouteParameters = RouteParameters(),
     hash: String = "",
     replace: Bool = false,
+    target: HTMLAttributeValue.Target? = nil,
     @HTMLBuilder content: () -> Content
   ) {
     self.route = route
@@ -86,34 +93,86 @@ public struct Link<Content: View> {
     self.query = query
     self.hash = hash
     self.replace = replace
+    self.target = target
     self.content = content()
   }
 
   public var body: some View {
-    a(.href(href)) {
-      content
-    }
-    .onClick { event in
-      guard event.button == 0,
-        !event.metaKey,
-        !event.ctrlKey,
-        !event.shiftKey,
-        !event.altKey
-      else {
-        return
+    if let target {
+      a(.href(href), .target(target)) {
+        content
       }
-
-      try? router?.navigate(
-        to: route,
-        params: params,
-        query: query,
-        hash: hash,
-        replace: replace
-      )
+      .onClick { event in
+        handleClick(event)
+      }
+    } else {
+      a(.href(href)) {
+        content
+      }
+      .onClick { event in
+        handleClick(event)
+      }
     }
+  }
+
+  private func handleClick(_ event: MouseEvent) {
+    let click = LinkClick(
+      button: event.button,
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      target: target?.rawValue
+    )
+
+    guard click.shouldIntercept else {
+      return
+    }
+
+    try? router?.navigate(
+      to: route,
+      params: params,
+      query: query,
+      hash: hash,
+      replace: replace
+    )
   }
 
   private var href: String {
     (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
+  }
+}
+
+public struct LinkClick: Equatable, Sendable {
+  public let button: Int
+  public let altKey: Bool
+  public let ctrlKey: Bool
+  public let metaKey: Bool
+  public let shiftKey: Bool
+  public let target: String?
+
+  public init(
+    button: Int,
+    altKey: Bool = false,
+    ctrlKey: Bool = false,
+    metaKey: Bool = false,
+    shiftKey: Bool = false,
+    target: String? = nil
+  ) {
+    self.button = button
+    self.altKey = altKey
+    self.ctrlKey = ctrlKey
+    self.metaKey = metaKey
+    self.shiftKey = shiftKey
+    self.target = target
+  }
+
+  public var shouldIntercept: Bool {
+    button == 0
+      && !altKey
+      && !ctrlKey
+      && !metaKey
+      && !shiftKey
+      && (target == nil || target == "" || target == "_self")
   }
 }

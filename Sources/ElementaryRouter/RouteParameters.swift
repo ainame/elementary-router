@@ -147,6 +147,15 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
     order
   }
 
+  public func containsAll(_ expected: RouteParameters) -> Bool {
+    for pair in expected.pairs {
+      if !all(pair.0).contains(pair.1) {
+        return false
+      }
+    }
+    return true
+  }
+
   mutating func append(_ name: String, _ value: String) {
     storage[name, default: []].append(value)
     order.append((name, value))

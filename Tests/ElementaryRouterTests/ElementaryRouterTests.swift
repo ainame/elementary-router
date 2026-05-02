@@ -243,6 +243,36 @@ struct MacroLayoutRoutes {
   #expect(router.currentMatch?.params.get("id") == "42")
 }
 
+@Test func routerSupportsActiveMatchingOptions() throws {
+  let routes = RouteCollection<EmptyHTML>()
+  let users = routes.route("/users") { EmptyHTML() }
+  let user = routes.children(of: users).route(":id") { EmptyHTML() }
+  let tree = try routes.freeze()
+  let router = Router(
+    routes: tree,
+    history: MemoryHistory(initialPath: "/users/42?tab=posts#details")
+  )
+
+  #expect(router.isActive(user))
+  #expect(!router.isActive(users))
+  #expect(router.isActive(users, options: .descendant))
+  #expect(router.isActive(user, options: ActiveMatchOptions(params: ["id": 42])))
+  #expect(router.isActive(user, options: ActiveMatchOptions(query: ["tab": "posts"])))
+  #expect(router.isActive(user, options: ActiveMatchOptions(hash: "details")))
+  #expect(!router.isActive(user, options: ActiveMatchOptions(params: ["id": 7])))
+}
+
+@Test func linkClickEligibilityPreservesBrowserNativeClicks() {
+  #expect(LinkClick(button: 0).shouldIntercept)
+  #expect(LinkClick(button: 0, target: "_self").shouldIntercept)
+  #expect(!LinkClick(button: 1).shouldIntercept)
+  #expect(!LinkClick(button: 0, metaKey: true).shouldIntercept)
+  #expect(!LinkClick(button: 0, ctrlKey: true).shouldIntercept)
+  #expect(!LinkClick(button: 0, shiftKey: true).shouldIntercept)
+  #expect(!LinkClick(button: 0, altKey: true).shouldIntercept)
+  #expect(!LinkClick(button: 0, target: "_blank").shouldIntercept)
+}
+
 @Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
   let routes = RouteCollection<EmptyHTML>()
   routes.route("/") { EmptyHTML() }
