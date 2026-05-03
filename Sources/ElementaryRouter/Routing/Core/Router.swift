@@ -5,19 +5,10 @@ import Reactivity
 final class RouterState {
   public private(set) var location: RouteLocation
   public private(set) var matches: [RouteMatch]
-  public private(set) var navigationState: NavigationState = .idle
 
   init(location: RouteLocation, matches: [RouteMatch]) {
     self.location = location
     self.matches = matches
-  }
-
-  func startNavigation() {
-    navigationState = .navigating
-  }
-
-  func finishNavigation() {
-    navigationState = .idle
   }
 
   func apply(location: RouteLocation, matches: [RouteMatch]) {
@@ -81,10 +72,6 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     state.matches
   }
 
-  public var navigationState: NavigationState {
-    state.navigationState
-  }
-
   public var currentMatch: RouteMatch? {
     matches.last
   }
@@ -110,14 +97,12 @@ public final class Router<RouteContent: View, History: RouterHistory> {
   }
 
   public func navigate(to location: RouteLocation, replace: Bool = false) {
-    state.startNavigation()
     if replace {
       history.replace(location)
     } else {
       history.push(location)
     }
     apply(location)
-    state.finishNavigation()
   }
 
   public func replace(
