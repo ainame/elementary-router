@@ -34,7 +34,7 @@ public struct ActiveMatchOptions: Equatable, Sendable {
 }
 
 @Reactive
-public final class RouterState {
+final class RouterState {
   public private(set) var location: RouteLocation
   public private(set) var matches: [RouteMatch]
   public private(set) var navigationState: NavigationState = .idle

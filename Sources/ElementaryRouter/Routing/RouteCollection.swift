@@ -99,7 +99,7 @@ public final class RouteCollection<RouteContent: View> {
   }
 }
 
-public final class RouteScope<RouteContent: View> {
+public struct RouteScope<RouteContent: View> {
   private let collection: RouteCollection<RouteContent>
   private let prefix: String
   private let parent: RouteHandle?
