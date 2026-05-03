@@ -1,11 +1,6 @@
 import ElementaryRouterMacros
-import SwiftParser
-import SwiftParserDiagnostics
-import SwiftSyntax
-import SwiftSyntaxMacroExpansion
 import SwiftSyntaxMacros
-import SwiftSyntaxMacrosGenericTestSupport
-import Testing
+import SwiftSyntaxMacrosTestSupport
 import XCTest
 
 private let testMacros: [String: Macro.Type] = [
@@ -16,104 +11,27 @@ private let testMacros: [String: Macro.Type] = [
   "RouteError": RouteErrorMacro.self,
 ]
 
-private func trimSpaces(_ line: Substring) -> Substring {
-  var start = line.startIndex
-  var end = line.endIndex
-
-  while start < end && line[start] == " " {
-    start = line.index(after: start)
-  }
-
-  while start < end {
-    let previous = line.index(before: end)
-    guard line[previous] == " " else { break }
-    end = previous
-  }
-
-  return line[start..<end]
-}
-
-private func normalizeSource(_ source: String) -> String {
-  source
-    .split(separator: "\n", omittingEmptySubsequences: true)
-    .map { String(trimSpaces($0)) }
-    .joined(separator: "\n")
-}
-
-private func assertMacroExpansion(
-  _ originalSource: String,
-  expandedSource expectedExpandedSource: String,
-  diagnostics: [DiagnosticSpec] = [],
-  macros: [String: Macro.Type],
-  indentationWidth: Trivia = .spaces(4)
-) {
-  let specs = macros.mapValues { MacroSpec(type: $0) }
-  let originalSourceFile = Parser.parse(source: originalSource)
-  let context = BasicMacroExpansionContext(
-    sourceFiles: [originalSourceFile: .init(moduleName: "TestModule", fullFilePath: "test.swift")]
-  )
-
-  func contextGenerator(_ syntax: Syntax) -> BasicMacroExpansionContext {
-    BasicMacroExpansionContext(
-      sharingWith: context,
-      lexicalContext: syntax.allMacroLexicalContexts()
-    )
-  }
-
-  let expandedSourceFile = originalSourceFile.expand(
-    macroSpecs: specs,
-    contextGenerator: contextGenerator,
-    indentationWidth: indentationWidth
-  )
-  let parseDiagnostics = ParseDiagnosticsGenerator.diagnostics(for: expandedSourceFile)
-
-  #expect(
-    parseDiagnostics.isEmpty,
-    "Expanded source should not contain syntax errors: \(parseDiagnostics)"
-  )
-
-  let normalizedExpandedSource = normalizeSource(expandedSourceFile.description)
-  let normalizedExpectedSource = normalizeSource(expectedExpandedSource)
-
-  #expect(
-    normalizedExpandedSource == normalizedExpectedSource,
-    """
-    Macro expansion did not produce the expected expanded source.
-    Actual:
-    \(expandedSourceFile)
-    """
-  )
-
-  #expect(context.diagnostics.count == diagnostics.count)
-
-  for (actual, expected) in zip(context.diagnostics, diagnostics) {
-    let location = context.location(for: actual.position, anchoredAt: actual.node, fileName: "")
-    #expect(actual.diagMessage.message == expected.message)
-    #expect(location.line == expected.line)
-    #expect(location.column == expected.column)
-    #expect(actual.diagMessage.severity == expected.severity)
-  }
-}
-
-@Test func routesMacroExpansionGeneratesTypedRouteSet() {
-  assertMacroExpansion(
-    """
-    @Routes
-    struct AppRoutes {
-      @Route("/users/:id")
-      static func user(id: Int, tab: Query<String> = Query("overview")) -> UserPage {
-        UserPage(id: id, tab: tab.value)
-      }
-    }
-    """,
-    expandedSource:
+final class RoutesMacroTests: XCTestCase {
+  func testRoutesMacroExpansionGeneratesTypedRouteSet() {
+    assertMacroExpansion(
       """
+      @Routes
       struct AppRoutes {
+        @Route("/users/:id")
         static func user(id: Int, tab: Query<String> = Query("overview")) -> UserPage {
           UserPage(id: id, tab: tab.value)
         }
+      }
+      """,
+      expandedSource:
+        """
+        struct AppRoutes {
+          @Route("/users/:id")
+          static func user(id: Int, tab: Query<String> = Query("overview")) -> UserPage {
+            UserPage(id: id, tab: tab.value)
+          }
 
-        @View
+          @View
           struct RouteView {
             enum Storage {
               case user(id: Int, tab: String)
@@ -127,113 +45,117 @@ private func assertMacroExpansion(
 
             var body: some View {
               switch storage {
-                    case .user(let id, let tab):
+              case .user(let id, let tab):
                 AppRoutes.user(id: id, tab: Query(tab))
               }
             }
           }
 
           struct Handles {
-              let user: RouteHandle
+            let user: RouteHandle
 
-              init(user: RouteHandle) {
-                self.user = user
-              }
+            init(user: RouteHandle) {
+              self.user = user
             }
+          }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
+            let tree: RouteTree<RouteView>
+            let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
+            init(tree: RouteTree<RouteView>, handles: Handles) {
+              self.tree = tree
+              self.handles = handles
+            }
 
-              func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
+            func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
               let params: RouteParameters = ["id": RouteValueLiteral(id)]
-                var query = RouteParameters()
-                if let tab {
+              var query = RouteParameters()
+              if let tab {
                 query = query.set("tab", tab)
               }
               return try tree.href(to: handles.user, params: params, query: query, hash: hash)
             }
-            }
+          }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
-
-                  let user = collection.route("/users/:id") { context throws(RouteValueError) in
-                RouteView(storage: .user(id: try context.params.require("id", Int.self), tab: context.query.get("tab", String.self) ?? "overview"))
-              }
-
-              return RouteSet(
-                tree: try collection.freeze(),
-                handles: Handles(user: user)
-              )
+            let collection = RouteCollection<RouteView>()
+            let user = collection.route("/users/:id") { context throws(RouteValueError) in
+              RouteView(storage: .user(id: try context.params.require("id", Int.self), tab: context.query.get("tab", String.self) ?? "overview"))
             }
-      }
-      """,
-    macros: testMacros,
-    indentationWidth: .spaces(2)
-  )
-}
 
-@Test func routeMarkerMacrosRequireStaticFunctions() {
-  assertMacroExpansion(
-    """
-    @Routes
-    struct AppRoutes {
-      @Route("/valid")
-      static func valid() -> ValidPage {
-        ValidPage()
-      }
+            return RouteSet(
+              tree: try collection.freeze(),
+              handles: Handles(user: user)
+            )
+          }
+        }
+        """,
+      macros: testMacros,
+      indentationWidth: .spaces(2)
+    )
+  }
 
-      @Route("/users/:id")
-      func user(id: Int) -> UserPage {
-        UserPage()
-      }
-
-      @Layout("/admin")
-      func adminLayout<Content: View>(outlet: Outlet<Content>) -> AdminLayout<Content> {
-        AdminLayout(outlet: outlet)
-      }
-
-      @NotFound
-      func notFound(context: RouteNotFoundContext) -> NotFoundPage {
-        NotFoundPage()
-      }
-
-      @RouteError
-      func routeError(context: RouteErrorContext) -> ErrorPage {
-        ErrorPage()
-      }
-    }
-    """,
-    expandedSource:
+  func testRouteMarkerMacrosRequireStaticFunctions() {
+    assertMacroExpansion(
       """
+      @Routes
       struct AppRoutes {
+        @Route("/valid")
         static func valid() -> ValidPage {
           ValidPage()
         }
 
+        @Route("/users/:id")
         func user(id: Int) -> UserPage {
           UserPage()
         }
 
+        @Layout("/admin")
         func adminLayout<Content: View>(outlet: Outlet<Content>) -> AdminLayout<Content> {
           AdminLayout(outlet: outlet)
         }
 
+        @NotFound
         func notFound(context: RouteNotFoundContext) -> NotFoundPage {
           NotFoundPage()
         }
 
+        @RouteError
         func routeError(context: RouteErrorContext) -> ErrorPage {
           ErrorPage()
         }
+      }
+      """,
+      expandedSource:
+        """
+        struct AppRoutes {
+          @Route("/valid")
+          static func valid() -> ValidPage {
+            ValidPage()
+          }
 
-        @View
+          @Route("/users/:id")
+          func user(id: Int) -> UserPage {
+            UserPage()
+          }
+
+          @Layout("/admin")
+          func adminLayout<Content: View>(outlet: Outlet<Content>) -> AdminLayout<Content> {
+            AdminLayout(outlet: outlet)
+          }
+
+          @NotFound
+          func notFound(context: RouteNotFoundContext) -> NotFoundPage {
+            NotFoundPage()
+          }
+
+          @RouteError
+          func routeError(context: RouteErrorContext) -> ErrorPage {
+            ErrorPage()
+          }
+
+          @View
           struct RouteView {
             enum Storage {
               case valid
@@ -247,96 +169,96 @@ private func assertMacroExpansion(
 
             var body: some View {
               switch storage {
-                    case .valid:
+              case .valid:
                 AppRoutes.valid()
               }
             }
           }
 
           struct Handles {
-              let valid: RouteHandle
+            let valid: RouteHandle
 
-              init(valid: RouteHandle) {
-                self.valid = valid
-              }
+            init(valid: RouteHandle) {
+              self.valid = valid
             }
+          }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
+            let tree: RouteTree<RouteView>
+            let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
+            init(tree: RouteTree<RouteView>, handles: Handles) {
+              self.tree = tree
+              self.handles = handles
+            }
 
-              func validHref(hash: String = "") throws(RouteMatchError) -> String {
+            func validHref(hash: String = "") throws(RouteMatchError) -> String {
               let params = RouteParameters()
               let query = RouteParameters()
               return try tree.href(to: handles.valid, params: params, query: query, hash: hash)
             }
-            }
+          }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
-
-                  let valid = collection.route("/valid") {
-                RouteView(storage: .valid)
-              }
-
-              return RouteSet(
-                tree: try collection.freeze(),
-                handles: Handles(valid: valid)
-              )
+            let collection = RouteCollection<RouteView>()
+            let valid = collection.route("/valid") {
+              RouteView(storage: .valid)
             }
-      }
-      """,
-    diagnostics: [
-      DiagnosticSpec(
-        message: "`@Route` can only be attached to a static function.",
-        line: 8,
-        column: 3
-      ),
-      DiagnosticSpec(
-        message: "`@Layout` can only be attached to a static function.",
-        line: 13,
-        column: 3
-      ),
-      DiagnosticSpec(
-        message: "`@NotFound` can only be attached to a static function.",
-        line: 18,
-        column: 3
-      ),
-      DiagnosticSpec(
-        message: "`@RouteError` can only be attached to a static function.",
-        line: 23,
-        column: 3
-      ),
-    ],
-    macros: testMacros,
-    indentationWidth: .spaces(2)
-  )
-}
 
-@Test func routesMacroExpansionReportsMissingPathParameter() {
-  assertMacroExpansion(
-    """
-    @Routes
-    struct AppRoutes {
-      @Route("/users/:id")
-      static func user() -> UserPage {
-        UserPage()
-      }
-    }
-    """,
-    expandedSource:
+            return RouteSet(
+              tree: try collection.freeze(),
+              handles: Handles(valid: valid)
+            )
+          }
+        }
+        """,
+      diagnostics: [
+        DiagnosticSpec(
+          message: "`@Route` can only be attached to a static function.",
+          line: 9,
+          column: 3
+        ),
+        DiagnosticSpec(
+          message: "`@Layout` can only be attached to a static function.",
+          line: 14,
+          column: 3
+        ),
+        DiagnosticSpec(
+          message: "`@NotFound` can only be attached to a static function.",
+          line: 19,
+          column: 3
+        ),
+        DiagnosticSpec(
+          message: "`@RouteError` can only be attached to a static function.",
+          line: 24,
+          column: 3
+        ),
+      ],
+      macros: testMacros,
+      indentationWidth: .spaces(2)
+    )
+  }
+
+  func testRoutesMacroExpansionReportsMissingPathParameter() {
+    assertMacroExpansion(
       """
+      @Routes
       struct AppRoutes {
+        @Route("/users/:id")
         static func user() -> UserPage {
           UserPage()
         }
+      }
+      """,
+      expandedSource:
+        """
+        struct AppRoutes {
+          @Route("/users/:id")
+          static func user() -> UserPage {
+            UserPage()
+          }
 
-        @View
+          @View
           struct RouteView {
             enum Storage {
               case user
@@ -350,58 +272,58 @@ private func assertMacroExpansion(
 
             var body: some View {
               switch storage {
-                    case .user:
+              case .user:
                 AppRoutes.user()
               }
             }
           }
 
           struct Handles {
-              let user: RouteHandle
+            let user: RouteHandle
 
-              init(user: RouteHandle) {
-                self.user = user
-              }
+            init(user: RouteHandle) {
+              self.user = user
             }
+          }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
+            let tree: RouteTree<RouteView>
+            let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
+            init(tree: RouteTree<RouteView>, handles: Handles) {
+              self.tree = tree
+              self.handles = handles
+            }
 
-              func userHref(hash: String = "") throws(RouteMatchError) -> String {
+            func userHref(hash: String = "") throws(RouteMatchError) -> String {
               let params = RouteParameters()
               let query = RouteParameters()
               return try tree.href(to: handles.user, params: params, query: query, hash: hash)
             }
-            }
+          }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
-
-                  let user = collection.route("/users/:id") {
-                RouteView(storage: .user)
-              }
-
-              return RouteSet(
-                tree: try collection.freeze(),
-                handles: Handles(user: user)
-              )
+            let collection = RouteCollection<RouteView>()
+            let user = collection.route("/users/:id") {
+              RouteView(storage: .user)
             }
-      }
-      """,
-    diagnostics: [
-      DiagnosticSpec(
-        message: "Missing function parameter for path parameter `id`.",
-        line: 3,
-        column: 3
-      )
-    ],
-    macros: testMacros,
-    indentationWidth: .spaces(2)
-  )
+
+            return RouteSet(
+              tree: try collection.freeze(),
+              handles: Handles(user: user)
+            )
+          }
+        }
+        """,
+      diagnostics: [
+        DiagnosticSpec(
+          message: "Missing function parameter for path parameter `id`.",
+          line: 4,
+          column: 3
+        )
+      ],
+      macros: testMacros,
+      indentationWidth: .spaces(2)
+    )
+  }
 }
