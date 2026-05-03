@@ -27,24 +27,11 @@ public enum RoutesMacro: MemberMacro {
 
     for member in declaration.memberBlock.members {
       guard let function = member.decl.as(FunctionDeclSyntax.self) else {
-        let text = member.decl.trimmedDescription
-        if text.contains("@Route")
-          || text.contains("@Layout")
-          || text.contains("@NotFound")
-          || text.contains("@RouteError")
-        {
-          context.diagnose(
-            .init(node: Syntax(member.decl), message: RoutesDiagnostic.routeRequiresStaticFunction)
-          )
-        }
         continue
       }
 
       if function.hasAttribute(named: "Route") {
         guard function.isStatic else {
-          context.diagnose(
-            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
-          )
           continue
         }
 
@@ -72,9 +59,6 @@ public enum RoutesMacro: MemberMacro {
 
       if function.hasAttribute(named: "Layout") {
         guard function.isStatic else {
-          context.diagnose(
-            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
-          )
           continue
         }
 
@@ -107,9 +91,6 @@ public enum RoutesMacro: MemberMacro {
 
       if function.hasAttribute(named: "NotFound") {
         guard function.isStatic else {
-          context.diagnose(
-            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
-          )
           continue
         }
         if notFound != nil {
@@ -123,9 +104,6 @@ public enum RoutesMacro: MemberMacro {
 
       if function.hasAttribute(named: "RouteError") {
         guard function.isStatic else {
-          context.diagnose(
-            .init(node: Syntax(function), message: RoutesDiagnostic.routeRequiresStaticFunction)
-          )
           continue
         }
         if routeError != nil {
@@ -772,7 +750,6 @@ extension SyntaxProtocol {
 
 private enum RoutesDiagnostic: DiagnosticMessage {
   case routesRequiresStruct
-  case routeRequiresStaticFunction
   case routeRequiresStringLiteral
   case missingPathParameter(name: String)
   case extraPathParameter(name: String)
@@ -787,8 +764,6 @@ private enum RoutesDiagnostic: DiagnosticMessage {
     switch self {
     case .routesRequiresStruct:
       "`@Routes` can only be attached to a struct."
-    case .routeRequiresStaticFunction:
-      "Route declarations must be static functions."
     case .routeRequiresStringLiteral:
       "`@Route` requires a string literal path."
     case .missingPathParameter(let name):

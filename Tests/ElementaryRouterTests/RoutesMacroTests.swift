@@ -6,6 +6,7 @@ import Testing
 private let testMacros: [String: Macro.Type] = [
   "Routes": RoutesMacro.self,
   "Route": RouteMacro.self,
+  "Layout": LayoutMacro.self,
   "NotFound": NotFoundMacro.self,
   "RouteError": RouteErrorMacro.self,
 ]
@@ -89,6 +90,149 @@ private let testMacros: [String: Macro.Type] = [
         }
       }
       """,
+    macros: testMacros,
+    indentationWidth: .spaces(2)
+  )
+}
+
+@Test func routeMarkerMacrosRequireStaticFunctions() {
+  assertMacroExpansion(
+    """
+    @Routes
+    struct AppRoutes {
+      @Route("/valid")
+      static func valid() -> ValidPage {
+        ValidPage()
+      }
+
+      @Route("/users/:id")
+      func user(id: Int) -> UserPage {
+        UserPage()
+      }
+
+      @Layout("/admin")
+      func adminLayout<Content: View>(outlet: Outlet<Content>) -> AdminLayout<Content> {
+        AdminLayout(outlet: outlet)
+      }
+
+      @NotFound
+      func notFound(context: RouteNotFoundContext) -> NotFoundPage {
+        NotFoundPage()
+      }
+
+      @RouteError
+      func routeError(context: RouteErrorContext) -> ErrorPage {
+        ErrorPage()
+      }
+    }
+    """,
+    expandedSource:
+      """
+      struct AppRoutes {
+        @Route("/valid")
+        static func valid() -> ValidPage {
+          ValidPage()
+        }
+
+        @Route("/users/:id")
+        func user(id: Int) -> UserPage {
+          UserPage()
+        }
+
+        @Layout("/admin")
+        func adminLayout<Content: View>(outlet: Outlet<Content>) -> AdminLayout<Content> {
+          AdminLayout(outlet: outlet)
+        }
+
+        @NotFound
+        func notFound(context: RouteNotFoundContext) -> NotFoundPage {
+          NotFoundPage()
+        }
+
+        @RouteError
+        func routeError(context: RouteErrorContext) -> ErrorPage {
+          ErrorPage()
+        }
+
+        @View
+        struct RouteView {
+          enum Storage {
+            case valid
+          }
+
+          let storage: Storage
+
+          init(storage: Storage) {
+            self.storage = storage
+          }
+
+          var body: some View {
+            switch storage {
+            case .valid:
+              AppRoutes.valid()
+            }
+          }
+        }
+
+        struct Handles {
+          let valid: RouteHandle
+
+          init(valid: RouteHandle) {
+            self.valid = valid
+          }
+        }
+
+        struct RouteSet {
+          let tree: RouteTree<RouteView>
+          let handles: Handles
+
+          init(tree: RouteTree<RouteView>, handles: Handles) {
+            self.tree = tree
+            self.handles = handles
+          }
+
+          func validHref(hash: String = "") throws(RouteMatchError) -> String {
+            let params = RouteParameters()
+            let query = RouteParameters()
+            return try tree.href(to: handles.valid, params: params, query: query, hash: hash)
+          }
+        }
+
+        static func routes() throws(RouteTreeError) -> RouteSet {
+          let collection = RouteCollection<RouteView>()
+          let valid = collection.route("/valid") {
+            RouteView(storage: .valid)
+          }
+
+          return RouteSet(
+            tree: try collection.freeze(),
+            handles: Handles(valid: valid)
+          )
+        }
+      }
+      """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "`@Route` can only be attached to a static function.",
+        line: 9,
+        column: 3
+      ),
+      DiagnosticSpec(
+        message: "`@Layout` can only be attached to a static function.",
+        line: 14,
+        column: 3
+      ),
+      DiagnosticSpec(
+        message: "`@NotFound` can only be attached to a static function.",
+        line: 19,
+        column: 3
+      ),
+      DiagnosticSpec(
+        message: "`@RouteError` can only be attached to a static function.",
+        line: 24,
+        column: 3
+      ),
+    ],
     macros: testMacros,
     indentationWidth: .spaces(2)
   )
