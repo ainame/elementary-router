@@ -1,32 +1,3 @@
-public enum HistoryAction: Equatable, Sendable {
-  case push
-  case replace
-  case pop
-}
-
-public struct HistoryUpdate: Equatable, Sendable {
-  public let action: HistoryAction
-  public let location: RouteLocation
-
-  public init(action: HistoryAction, location: RouteLocation) {
-    self.action = action
-    self.location = location
-  }
-}
-
-public final class HistorySubscription {
-  private var cancelBody: (() -> Void)?
-
-  init(_ cancelBody: @escaping () -> Void) {
-    self.cancelBody = cancelBody
-  }
-
-  public func cancel() {
-    cancelBody?()
-    cancelBody = nil
-  }
-}
-
 public protocol RouterHistory: AnyObject {
   var location: RouteLocation { get }
   func push(_ location: RouteLocation)
