@@ -70,17 +70,26 @@ struct AppRoutes {
 }
 ```
 
-Create a router from the generated route set:
-
-```swift
-let routeSet = try AppRoutes.routes()
-let router = routeSet.router()
-```
-
-If you only need the router and not the generated handles, use the convenience factory:
+Create a router from the route declaration:
 
 ```swift
 let router = try AppRoutes.router()
+```
+
+If you also need the generated handles or href helpers, build the route set separately:
+
+```swift
+let routeSet = try AppRoutes.routes()
+let router = try AppRoutes.router()
+```
+
+Use hash routing explicitly when you need static-hosting fallback:
+
+```swift
+@Routes(mode: .hash)
+struct DocsRoutes { ... }
+
+let router = try DocsRoutes.router()
 ```
 
 Render the current route with the generated typed route view:

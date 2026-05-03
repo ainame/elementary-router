@@ -3,6 +3,11 @@ import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 
+private enum RoutesMode {
+  case path
+  case hash
+}
+
 public enum RoutesMacro: MemberMacro {
   public static func expansion(
     of node: AttributeSyntax,
@@ -19,6 +24,7 @@ public enum RoutesMacro: MemberMacro {
 
     let containerName = structDeclaration.name.text
     let access = declaration.accessModifier
+    let mode = parseRoutesMode(from: node, context: context)
     var routes: [RouteDeclaration] = []
     var layouts: [RouteDeclaration] = []
     var notFound: FunctionDeclSyntax?
@@ -136,6 +142,7 @@ public enum RoutesMacro: MemberMacro {
       DeclSyntax(
         stringLiteral: routesFunctionDeclaration(
           access: access,
+          mode: mode,
           routes: routes,
           layouts: layouts,
           notFound: notFound,
@@ -544,14 +551,6 @@ private func routeSetDeclaration(
           self.handles = handles
         }
 
-        \(access)func router() -> Router<RouteView> {
-          Router(routes: tree)
-        }
-
-        \(access)func hashRouter() -> HashRouter<RouteView> {
-          HashRouter(routes: tree)
-        }
-
       \(hrefs)
       }
     """
@@ -559,6 +558,7 @@ private func routeSetDeclaration(
 
 private func routesFunctionDeclaration(
   access: String,
+  mode: RoutesMode,
   routes: [RouteDeclaration],
   layouts: [RouteDeclaration],
   notFound: FunctionDeclSyntax?,
@@ -588,6 +588,8 @@ private func routesFunctionDeclaration(
   }
 
   let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
+  let routerType = mode == .hash ? "HashRouter<RouteView>" : "Router<RouteView>"
+  let routerInitializer = mode == .hash ? "HashRouter(routes: tree)" : "Router(routes: tree)"
 
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
@@ -601,14 +603,42 @@ private func routesFunctionDeclaration(
         )
       }
 
-      \(access)static func router() throws(RouteTreeError) -> Router<RouteView> {
-        try routes().router()
-      }
-
-      \(access)static func hashRouter() throws(RouteTreeError) -> HashRouter<RouteView> {
-        try routes().hashRouter()
+      \(access)static func router() throws(RouteTreeError) -> \(routerType) {
+        let routeSet = try routes()
+        let tree = routeSet.tree
+        return \(routerInitializer)
       }
     """
+}
+
+private func parseRoutesMode(
+  from node: AttributeSyntax,
+  context: some MacroExpansionContext
+) -> RoutesMode {
+  guard case .argumentList(let arguments) = node.arguments else {
+    return .path
+  }
+
+  guard
+    let modeArgument = arguments.first(where: { argument in
+      argument.label?.text == "mode"
+    })
+  else {
+    return .path
+  }
+
+  let expression = modeArgument.expression.trimmedDescription
+  switch expression {
+  case ".path", "RoutesMode.path":
+    return .path
+  case ".hash", "RoutesMode.hash":
+    return .hash
+  default:
+    context.diagnose(
+      .init(node: Syntax(modeArgument.expression), message: RoutesDiagnostic.unsupportedRoutesMode)
+    )
+    return .path
+  }
 }
 
 private func routeRegistration(_ route: RouteDeclaration, parent: RouteDeclaration?) -> String {
@@ -782,6 +812,7 @@ private enum RoutesDiagnostic: DiagnosticMessage {
   case duplicateRoute(path: String)
   case duplicateNotFound
   case duplicateRouteError
+  case unsupportedRoutesMode
 
   var message: String {
     switch self {
@@ -805,6 +836,8 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "`@Routes` can only declare one `@NotFound` function."
     case .duplicateRouteError:
       "`@Routes` can only declare one `@RouteError` function."
+    case .unsupportedRoutesMode:
+      "`@Routes(mode:)` only supports `.path` and `.hash`."
     }
   }
 

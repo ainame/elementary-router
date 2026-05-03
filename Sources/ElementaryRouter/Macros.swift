@@ -4,10 +4,15 @@
   named(RouteSet),
   named(Handles),
   named(routes),
-  named(router),
-  named(hashRouter)
+  named(router)
 )
-public macro Routes() = #externalMacro(module: "ElementaryRouterMacros", type: "RoutesMacro")
+public macro Routes(mode: RoutesMode = .path) =
+  #externalMacro(module: "ElementaryRouterMacros", type: "RoutesMacro")
+
+public enum RoutesMode {
+  case path
+  case hash
+}
 
 @attached(peer, names: arbitrary)
 public macro Route(_ path: String) =
