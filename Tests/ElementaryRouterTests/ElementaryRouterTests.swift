@@ -256,10 +256,15 @@ struct MacroLayoutRoutes {
   #expect(router.isActive(user))
   #expect(!router.isActive(users))
   #expect(router.isActive(users, options: .descendant))
-  #expect(router.isActive(user, options: ActiveMatchOptions(params: ["id": 42])))
-  #expect(router.isActive(user, options: ActiveMatchOptions(query: ["tab": "posts"])))
-  #expect(router.isActive(user, options: ActiveMatchOptions(hash: "details")))
-  #expect(!router.isActive(user, options: ActiveMatchOptions(params: ["id": 7])))
+  #expect(router.isActive(user, options: .init(params: ["id": 42])))
+  #expect(
+    router.isActive(
+      user,
+      options: .init(query: ["tab": "posts"])
+    )
+  )
+  #expect(router.isActive(user, options: .init(hash: "details")))
+  #expect(!router.isActive(user, options: .init(params: ["id": 7])))
 }
 
 @Test func linkClickEligibilityPreservesBrowserNativeClicks() {

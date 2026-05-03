@@ -15,11 +15,6 @@ protocol RouterNavigation: AnyObject {
     hash: String,
     replace: Bool
   ) throws(RouteMatchError)
-
-  func isActive(
-    _ route: RouteHandle,
-    options: ActiveMatchOptions
-  ) -> Bool
 }
 
 extension EnvironmentValues {
