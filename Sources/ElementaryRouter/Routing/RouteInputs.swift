@@ -21,7 +21,7 @@ public struct Outlet<Content: View> {
   }
 }
 
-public struct Query<Value: RouteValue>: Equatable, Sendable where Value: Equatable & Sendable {
+public struct Query<Value: RouteValue & Equatable>: Equatable, Sendable {
   public let value: Value
 
   public init(_ value: Value) {

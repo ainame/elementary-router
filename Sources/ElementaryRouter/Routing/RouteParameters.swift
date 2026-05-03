@@ -3,7 +3,7 @@ public enum RouteValueError: Error, Equatable, Sendable {
   case invalid(name: String, rawValue: String, expected: String)
 }
 
-public protocol RouteValue {
+public protocol RouteValue: Sendable {
   static var routeValueTypeName: String { get }
   static func parseRouteValue(_ rawValue: String) -> Self?
   var routeValueString: String { get }
