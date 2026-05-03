@@ -58,13 +58,13 @@ public final class RouterState {
   }
 }
 
-public final class Router<RouteContent: View> {
+public final class Router<RouteContent: View, History: RouterHistory> {
   private let state: RouterState
   private let routes: RouteTree<RouteContent>
-  private let history: any RouterHistory
+  private let history: History
   private var subscription: HistorySubscription?
 
-  public init(routes: RouteTree<RouteContent>, history: any RouterHistory) {
+  public init(routes: RouteTree<RouteContent>, history: History) {
     self.routes = routes
     self.history = history
     self.state = RouterState(location: history.location, matches: routes.matches(history.location))
@@ -190,3 +190,7 @@ public final class Router<RouteContent: View> {
 }
 
 extension Router: RouterNavigation {}
+
+public typealias BrowserRouter<RouteContent: View> = Router<RouteContent, BrowserHistory>
+public typealias HashRouter<RouteContent: View> = Router<RouteContent, HashHistory>
+public typealias MemoryRouter<RouteContent: View> = Router<RouteContent, MemoryHistory>

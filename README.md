@@ -74,7 +74,7 @@ Create a router from the generated route set:
 
 ```swift
 let routeSet = try AppRoutes.routes()
-let router = Router(routes: routeSet.tree, history: .browser())
+let router = Router(routes: routeSet.tree, history: BrowserHistory())
 ```
 
 Render the current route with the generated typed route view:
@@ -94,7 +94,8 @@ RouterProvider(router) {
 Generate links with route handles or generated href helpers:
 
 ```swift
-Link(
+RouterLink(
+  router: router,
   to: routeSet.handles.profile,
   params: ["lang": "ja", "profileId": 42],
   query: ["tab": "posts"]
@@ -221,6 +222,8 @@ an invalid `Int` path parameter.
 
 - `Router.matches` is the parent-to-leaf match stack.
 - `Router.currentMatch` is a leaf convenience.
+- `Router` is generic over its history adapter, so core navigation does not store
+  `any RouterHistory` existential values.
 - `@Layout` composes nested route UI through `Outlet<Content>`.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
 - `RouteParameters` is used for both path params and query params.
@@ -229,7 +232,7 @@ an invalid `Int` path parameter.
 
 ## Link Interception Status
 
-`Link` emits a normal anchor with `href` and `data-router-link="true"`, then
+`RouterLink` emits a normal anchor with `href` and `data-router-link="true"`, then
 uses ElementaryUI's Swift `onClick` handler to call router navigation only for
 eligible clicks:
 
@@ -239,6 +242,12 @@ eligible clicks:
 
 Modifier clicks, middle clicks, and `_blank` targets stay native browser
 behavior.
+
+`RouterLink(router:to:)` takes the typed router directly and avoids environment
+lookup. `Link(to:)` remains available as a convenience when the router is
+installed with `RouterProvider`, but that path stores navigation in
+ElementaryUI's environment as an existential value and is not the strictest
+Embedded Swift shape.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call
@@ -288,6 +297,7 @@ In scope for 0.0.1:
 - nested typed layouts with `@Layout` and `Outlet<Content>`
 - browser, hash, and memory history adapters
 - route handles, href helpers, active matching, not-found, and route-error fallback rendering
+- direct-router `RouterLink` for an Embedded-friendlier link path
 
 Out of scope for 0.0.1:
 
