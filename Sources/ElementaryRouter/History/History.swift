@@ -36,7 +36,7 @@ public protocol RouterHistory: AnyObject {
 }
 
 extension RouterHistory where Self == MemoryHistory {
-  public static func memory(initialPath: String = "/") -> MemoryHistory {
+  static func memory(initialPath: String = "/") -> MemoryHistory {
     MemoryHistory(initialPath: initialPath)
   }
 }

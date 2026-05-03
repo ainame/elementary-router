@@ -193,4 +193,4 @@ extension Router: RouterNavigation {}
 
 public typealias BrowserRouter<RouteContent: View> = Router<RouteContent, BrowserHistory>
 public typealias HashRouter<RouteContent: View> = Router<RouteContent, HashHistory>
-public typealias MemoryRouter<RouteContent: View> = Router<RouteContent, MemoryHistory>
+typealias MemoryRouter<RouteContent: View> = Router<RouteContent, MemoryHistory>

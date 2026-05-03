@@ -15,7 +15,7 @@
 - Use `ElementaryUI`, `Reactivity`, and `JavaScriptKit` directly. Do not depend on ElementaryUI internal browser interop APIs.
 - Browser integration should remain adapter-based:
   - `BrowserHistory` for JavaScriptKit-backed browser history.
-  - `MemoryHistory` for tests.
+  - internal `MemoryHistory` for tests and non-JS fallback.
   - `HashHistory` for static hosting fallback.
 - Use `RouteParameters` for path params and query params. It supports dictionary literals and tuple-list initialization.
 - `RouteHandle` and `RouteID` should be created by route registration only. Do not add public initializers unless the route identity model is redesigned.
