@@ -1,7 +1,7 @@
 import ElementaryUI
 
 public final class RouteCollection<RouteContent: View> {
-  private var records: [RouteRecordBuilder<RouteContent>] = []
+  private var records: [RecordBuilder] = []
   private var notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   private var errorRenderer: ((RouteErrorContext) -> RouteContent)?
   private var nextID = 0
@@ -52,7 +52,7 @@ public final class RouteCollection<RouteContent: View> {
   }
 
   public func freeze() throws(RouteTreeError) -> RouteTree<RouteContent> {
-    var compiled: [CompiledRouteRecord<RouteContent>] = []
+    var compiled: [RouteTree<RouteContent>.Record] = []
     var seenPaths: [String] = []
 
     for record in records {
@@ -62,7 +62,7 @@ public final class RouteCollection<RouteContent: View> {
       }
       seenPaths.append(pattern.path)
       compiled.append(
-        CompiledRouteRecord(
+        RouteTree.Record(
           handle: record.handle,
           parent: record.parent,
           pattern: pattern,
@@ -92,16 +92,16 @@ public final class RouteCollection<RouteContent: View> {
     parent: RouteHandle?,
     render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    let handle = RouteHandle(id: RouteID(rawValue: nextID))
+    let handle = RouteHandle(id: .init(rawValue: nextID))
     nextID += 1
-    records.append(RouteRecordBuilder(handle: handle, parent: parent, path: path, render: render))
+    records.append(RecordBuilder(handle: handle, parent: parent, path: path, render: render))
     return handle
   }
-}
 
-private struct RouteRecordBuilder<RouteContent: View> {
-  let handle: RouteHandle
-  let parent: RouteHandle?
-  let path: String
-  let render: (RouteContext) throws(RouteValueError) -> RouteContent
+  private struct RecordBuilder {
+    let handle: RouteHandle
+    let parent: RouteHandle?
+    let path: String
+    let render: (RouteContext) throws(RouteValueError) -> RouteContent
+  }
 }

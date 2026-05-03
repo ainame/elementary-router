@@ -186,7 +186,7 @@ struct MacroLayoutRoutes {
   let routes = RouteCollection<EmptyHTML>()
   routes.route("/") { EmptyHTML() }
   let tree = try routes.freeze()
-  let unknown = RouteHandle(id: RouteID(rawValue: 999))
+  let unknown = RouteHandle(id: .init(rawValue: 999))
 
   #expect(throws: RouteMatchError.unknownRoute) {
     try tree.href(to: unknown)

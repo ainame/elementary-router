@@ -1,7 +1,20 @@
 import ElementaryUI
 
 public struct RouteTree<RouteContent: View> {
-  let records: [CompiledRouteRecord<RouteContent>]
+  struct Record {
+    let handle: RouteHandle
+    let parent: RouteHandle?
+    let pattern: RoutePattern
+    let render: (RouteContext) throws(RouteValueError) -> RouteContent
+  }
+
+  enum Resolution: Sendable {
+    case matched(RouteContext)
+    case notFound(RouteNotFoundContext)
+    case error(RouteErrorContext)
+  }
+
+  let records: [Record]
   let notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   let errorRenderer: ((RouteErrorContext) -> RouteContent)?
 
@@ -36,7 +49,7 @@ public struct RouteTree<RouteContent: View> {
     return href
   }
 
-  func resolve(_ location: RouteLocation) -> RouteRenderResolution {
+  func resolve(_ location: RouteLocation) -> Resolution {
     guard let record = findLeafRecord(for: location) else {
       return .notFound(
         RouteNotFoundContext(
@@ -120,7 +133,7 @@ public struct RouteTree<RouteContent: View> {
     return rendered
   }
 
-  private func findLeafRecord(for location: RouteLocation) -> CompiledRouteRecord<RouteContent>? {
+  private func findLeafRecord(for location: RouteLocation) -> Record? {
     for record in records {
       if record.pattern.match(location.path) != nil {
         return record
@@ -130,13 +143,13 @@ public struct RouteTree<RouteContent: View> {
   }
 
   private func matchStack(
-    for leaf: CompiledRouteRecord<RouteContent>,
+    for leaf: Record,
     location: RouteLocation
   ) -> [RouteMatch] {
     let recordsByID = recordsByRouteID()
 
-    var chain: [CompiledRouteRecord<RouteContent>] = []
-    var current: CompiledRouteRecord<RouteContent>? = leaf
+    var chain: [Record] = []
+    var current: Record? = leaf
     while let record = current {
       chain.append(record)
       if let parent = record.parent {
@@ -159,8 +172,8 @@ public struct RouteTree<RouteContent: View> {
     return matches
   }
 
-  private func recordsByRouteID() -> [RouteID: CompiledRouteRecord<RouteContent>] {
-    var recordsByID: [RouteID: CompiledRouteRecord<RouteContent>] = [:]
+  private func recordsByRouteID() -> [RouteHandle.ID: Record] {
+    var recordsByID: [RouteHandle.ID: Record] = [:]
     for record in records {
       recordsByID[record.handle.id] = record
     }

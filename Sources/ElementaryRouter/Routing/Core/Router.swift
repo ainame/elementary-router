@@ -144,7 +144,7 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     return true
   }
 
-  func resolveCurrentRoute() -> RouteRenderResolution {
+  func resolveCurrentRoute() -> RouteTree<RouteContent>.Resolution {
     routes.resolve(location)
   }
 
