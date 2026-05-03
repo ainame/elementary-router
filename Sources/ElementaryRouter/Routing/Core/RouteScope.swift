@@ -35,7 +35,7 @@ public struct RouteScope<RouteContent: View> {
     return collection.add(path: joined(path), parent: parent, render: render)
   }
 
-  public func scope(_ path: String) -> RouteScope<RouteContent> {
+  func scope(_ path: String) -> RouteScope<RouteContent> {
     RouteScope(collection: collection, prefix: joined(path), parent: parent)
   }
 

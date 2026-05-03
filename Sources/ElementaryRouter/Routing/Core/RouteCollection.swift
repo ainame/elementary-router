@@ -28,7 +28,7 @@ public final class RouteCollection<RouteContent: View> {
     return add(path: path, parent: nil, render: render)
   }
 
-  public func scope(_ path: String) -> RouteScope<RouteContent> {
+  func scope(_ path: String) -> RouteScope<RouteContent> {
     RouteScope(collection: self, prefix: path, parent: nil)
   }
 

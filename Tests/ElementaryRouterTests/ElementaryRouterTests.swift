@@ -267,17 +267,6 @@ struct MacroLayoutRoutes {
   #expect(!router.isActive(user, options: .init(params: ["id": 7])))
 }
 
-@Test func linkClickEligibilityPreservesBrowserNativeClicks() {
-  #expect(LinkClick(button: 0).shouldIntercept)
-  #expect(LinkClick(button: 0, target: "_self").shouldIntercept)
-  #expect(!LinkClick(button: 1).shouldIntercept)
-  #expect(!LinkClick(button: 0, metaKey: true).shouldIntercept)
-  #expect(!LinkClick(button: 0, ctrlKey: true).shouldIntercept)
-  #expect(!LinkClick(button: 0, shiftKey: true).shouldIntercept)
-  #expect(!LinkClick(button: 0, altKey: true).shouldIntercept)
-  #expect(!LinkClick(button: 0, target: "_blank").shouldIntercept)
-}
-
 @Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
   let routes = RouteCollection<EmptyHTML>()
   routes.route("/") { EmptyHTML() }

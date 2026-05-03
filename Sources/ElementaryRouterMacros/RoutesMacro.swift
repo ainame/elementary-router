@@ -655,16 +655,14 @@ private func linkDeclaration(
         }
 
         private func handleClick(_ event: MouseEvent) {
-          let click = LinkClick(
-            button: event.button,
-            altKey: event.altKey,
-            ctrlKey: event.ctrlKey,
-            metaKey: event.metaKey,
-            shiftKey: event.shiftKey,
-            target: target?.rawValue
-          )
-
-          guard click.shouldIntercept else {
+          guard
+            event.button == 0,
+            !event.altKey,
+            !event.ctrlKey,
+            !event.metaKey,
+            !event.shiftKey,
+            target == nil || target?.rawValue == "" || target?.rawValue == "_self"
+          else {
             return
           }
 

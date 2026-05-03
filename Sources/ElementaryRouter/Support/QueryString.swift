@@ -1,5 +1,5 @@
-public enum QueryString {
-  public static func parse(_ queryString: String) -> RouteParameters {
+enum QueryString {
+  static func parse(_ queryString: String) -> RouteParameters {
     var values = RouteParameters()
     let query = RouteLocation.trimmedQuery(queryString)
     guard !query.isEmpty else { return values }
@@ -19,7 +19,7 @@ public enum QueryString {
     return values
   }
 
-  public static func stringify(_ values: RouteParameters) -> String {
+  static func stringify(_ values: RouteParameters) -> String {
     var result = ""
     var isFirst = true
     for (name, value) in values.pairs {
