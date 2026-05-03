@@ -7,21 +7,21 @@ struct ContentView {
   let router: Router<AppRoutes.RouteView>
 
   var body: some View {
-    RouterProvider(router) {
+    AppRoutes.Provider(router) {
       div(.style(pageStyle)) {
         header(.style(headerStyle)) {
           h1(.style(titleStyle)) { "ElementaryUI Router" }
           nav(.style(navStyle)) {
-            Link(to: routeSet.handles.home) {
+            AppRoutes.Link(to: routeSet.handles.home) {
               "Home"
             }
-            Link(
+            AppRoutes.Link(
               to: routeSet.handles.profile,
               params: ["lang": "ja", "profileId": 42]
             ) {
               "Profile"
             }
-            Link(
+            AppRoutes.Link(
               to: routeSet.handles.docs,
               params: ["*": "guide/get-started"],
               hash: "install"

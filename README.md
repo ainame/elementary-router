@@ -95,7 +95,7 @@ let router = try DocsRoutes.router()
 Render the current route with the generated typed route view:
 
 ```swift
-RouterProvider(router) {
+AppRoutes.Provider(router) {
   RouterView(router) { _ in
     AppRoutes.RouteView(
       storage: .notFound(
@@ -109,8 +109,7 @@ RouterProvider(router) {
 Generate links with route handles or generated href helpers:
 
 ```swift
-RouterLink(
-  router: router,
+AppRoutes.Link(
   to: routeSet.handles.profile,
   params: ["lang": "ja", "profileId": 42],
   query: ["tab": "posts"]
@@ -139,7 +138,10 @@ The macro generates:
 - `AppRoutes.RouteView`: a single typed view union for all route outputs
 - `AppRoutes.Handles`: named route handles
 - `AppRoutes.RouteSet`: the generated route tree plus handles
+- `AppRoutes.Provider`: a typed router provider for this route declaration
+- `AppRoutes.Link`: a typed link view for this route declaration
 - `AppRoutes.routes()`: the factory used to build a router
+- `AppRoutes.router()`: the typed router factory for the declared routing mode
 - route-specific href helpers, such as `profileHref(...)`
 
 Route declarations must be `static func` members inside the `@Routes` struct.
@@ -247,8 +249,9 @@ an invalid `Int` path parameter.
 
 ## Link Interception Status
 
-`RouterLink` emits a normal anchor with `href` and `data-router-link="true"`, then
-uses ElementaryUI's Swift `onClick` handler to call router navigation only for
+Generated route-set links such as `AppRoutes.Link` emit a normal anchor with
+`href` and `data-router-link="true"`, then use ElementaryUI's Swift `onClick`
+handler to call router navigation only for
 eligible clicks:
 
 - left button
@@ -258,15 +261,11 @@ eligible clicks:
 Modifier clicks, middle clicks, and `_blank` targets stay native browser
 behavior.
 
-`RouterLink(router:to:)` takes the typed router directly and avoids environment
-lookup. `Link(to:)` remains available as a convenience when the router is
-installed with `RouterProvider`, but that path stores navigation in
-ElementaryUI's environment as an existential value and is not the strictest
-Embedded Swift shape.
-
-TODO: once the route-set factory path is fully adopted across the public API,
-re-evaluate whether `RouterProvider` + `Link` should remain or be reduced in
-favor of direct-router links.
+`AppRoutes.Provider` installs a concrete `Router<AppRoutes.RouteView>` or
+`HashRouter<AppRoutes.RouteView>` in ElementaryUI's environment, and
+`AppRoutes.Link(to:)` reads that typed router back without existential erasure.
+`RouterLink(router:to:)` remains available when you want the router to stay
+explicit at the call site.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call
@@ -316,7 +315,8 @@ In scope for 0.0.1:
 - nested typed layouts with `@Layout` and `Outlet<Content>`
 - browser routing, hash routing, and internal test adapters
 - route handles, href helpers, active matching, not-found, and route-error fallback rendering
-- direct-router `RouterLink` for an Embedded-friendlier link path
+- typed route-set `Provider` and `Link` generation
+- direct-router `RouterLink` when explicit router injection is preferred
 
 Out of scope for 0.0.1:
 

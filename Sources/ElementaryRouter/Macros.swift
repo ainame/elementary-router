@@ -2,7 +2,10 @@
   member,
   names: named(RouteView),
   named(RouteSet),
+  named(_routerEnvironmentKey),
   named(Handles),
+  named(Provider),
+  named(Link),
   named(routes),
   named(router)
 )

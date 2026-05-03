@@ -140,6 +140,26 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: routeSetDeclaration(access: access, routes: routes, layouts: layouts)
       ),
       DeclSyntax(
+        stringLiteral: routerEnvironmentKeyDeclaration(
+          access: access,
+          mode: mode,
+          containerName: containerName
+        )
+      ),
+      DeclSyntax(
+        stringLiteral: providerDeclaration(
+          access: access,
+          mode: mode,
+          containerName: containerName
+        )
+      ),
+      DeclSyntax(
+        stringLiteral: linkDeclaration(
+          access: access,
+          containerName: containerName
+        )
+      ),
+      DeclSyntax(
         stringLiteral: routesFunctionDeclaration(
           access: access,
           mode: mode,
@@ -556,6 +576,129 @@ private func routeSetDeclaration(
     """
 }
 
+private func providerDeclaration(
+  access: String,
+  mode: RoutesMode,
+  containerName: String
+) -> String {
+  let router = routerType(mode: mode, routeViewType: "RouteView")
+
+  return """
+      @View
+      \(access)struct Provider<Content: View> {
+        let router: \(router)
+        let content: Content
+
+        \(access)init(_ router: \(router), @HTMLBuilder content: () -> Content) {
+          self.router = router
+          self.content = content()
+        }
+
+        \(access)var body: some View {
+          content.environment(\(containerName)._routerEnvironmentKey, router)
+        }
+      }
+    """
+}
+
+private func linkDeclaration(
+  access: String,
+  containerName: String
+) -> String {
+  return """
+      @View
+      \(access)struct Link<Content: View> {
+        @Environment(\(containerName)._routerEnvironmentKey) var router
+
+        let route: RouteHandle
+        let params: RouteParameters
+        let query: RouteParameters
+        let hash: String
+        let replace: Bool
+        let target: HTMLAttributeValue.Target?
+        let content: Content
+
+        \(access)init(
+          to route: RouteHandle,
+          params: RouteParameters = RouteParameters(),
+          query: RouteParameters = RouteParameters(),
+          hash: String = "",
+          replace: Bool = false,
+          target: HTMLAttributeValue.Target? = nil,
+          @HTMLBuilder content: () -> Content
+        ) {
+          self.route = route
+          self.params = params
+          self.query = query
+          self.hash = hash
+          self.replace = replace
+          self.target = target
+          self.content = content()
+        }
+
+        \(access)var body: some View {
+          if let target {
+            a(.href(href), .target(target), .data("router-link", value: "true")) {
+              content
+            }
+            .onClick { event in
+              handleClick(event)
+            }
+          } else {
+            a(.href(href), .data("router-link", value: "true")) {
+              content
+            }
+            .onClick { event in
+              handleClick(event)
+            }
+          }
+        }
+
+        private func handleClick(_ event: MouseEvent) {
+          let click = LinkClick(
+            button: event.button,
+            altKey: event.altKey,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+            shiftKey: event.shiftKey,
+            target: target?.rawValue
+          )
+
+          guard click.shouldIntercept else {
+            return
+          }
+
+          try? router?.navigate(
+            to: route,
+            params: params,
+            query: query,
+            hash: hash,
+            replace: replace
+          )
+        }
+
+        private var href: String {
+          (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
+        }
+      }
+    """
+}
+
+private func routerEnvironmentKeyDeclaration(
+  access: String,
+  mode: RoutesMode,
+  containerName: String
+) -> String {
+  let router = routerType(mode: mode, routeViewType: "RouteView")
+
+  return """
+      \(access)static let _routerEnvironmentKey = EnvironmentValues._Key<\(router)?>(
+        "ElementaryRouter.\(containerName).router",
+        defaultValue: nil
+      )
+    """
+}
+
 private func routesFunctionDeclaration(
   access: String,
   mode: RoutesMode,
@@ -588,8 +731,8 @@ private func routesFunctionDeclaration(
   }
 
   let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
-  let routerType = mode == .hash ? "HashRouter<RouteView>" : "Router<RouteView>"
-  let routerInitializer = mode == .hash ? "HashRouter(routes: tree)" : "Router(routes: tree)"
+  let routerType = routerType(mode: mode, routeViewType: "RouteView")
+  let routerInitializer = routerInitializer(mode: mode, treeName: "tree")
 
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
@@ -609,6 +752,24 @@ private func routesFunctionDeclaration(
         return \(routerInitializer)
       }
     """
+}
+
+private func routerType(mode: RoutesMode, routeViewType: String) -> String {
+  switch mode {
+  case .path:
+    return "Router<\(routeViewType)>"
+  case .hash:
+    return "HashRouter<\(routeViewType)>"
+  }
+}
+
+private func routerInitializer(mode: RoutesMode, treeName: String) -> String {
+  switch mode {
+  case .path:
+    return "Router(routes: \(treeName))"
+  case .hash:
+    return "HashRouter(routes: \(treeName))"
+  }
 }
 
 private func parseRoutesMode(

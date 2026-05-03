@@ -9,7 +9,7 @@ struct ContentView {
   let router: Router<AppRoutes.RouteView>
 
   var body: some View {
-    RouterProvider(router) {
+    AppRoutes.Provider(router) {
       div(.style(pageStyle)) {
         header(.style(headerStyle)) {
           div {

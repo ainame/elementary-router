@@ -51,10 +51,6 @@ public final class Router<RouteContent: View> {
     self.storage = HistoryRouter(routes: routes, history: BrowserHistory())
   }
 
-  var navigation: any RouterNavigation {
-    storage
-  }
-
   public var location: RouteLocation {
     storage.location
   }
@@ -128,10 +124,6 @@ public final class HashRouter<RouteContent: View> {
     self.storage = HistoryRouter(routes: routes, history: HashHistory())
   }
 
-  var navigation: any RouterNavigation {
-    storage
-  }
-
   public var location: RouteLocation {
     storage.location
   }
@@ -196,7 +188,7 @@ public final class HashRouter<RouteContent: View> {
   }
 }
 
-final class HistoryRouter<RouteContent: View, History: RouterHistory>: RouterNavigation {
+final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
   private let state: RouterState

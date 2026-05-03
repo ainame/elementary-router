@@ -7,7 +7,7 @@ struct FilterLink {
   let route: RouteHandle
 
   var body: some View {
-    Link(to: route) {
+    AppRoutes.Link(to: route) {
       title
     }
   }
