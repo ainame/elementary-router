@@ -68,7 +68,7 @@ private let testMacros: [String: Macro.Type] = [
           }
 
           func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
-            let params = RouteParameters(("id", RouteValueLiteral(id)))
+            let params: RouteParameters = ["id": RouteValueLiteral(id)]
             var query = RouteParameters()
             if let tab {
               query = query.set("tab", tab)

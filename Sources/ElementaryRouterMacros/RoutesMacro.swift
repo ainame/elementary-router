@@ -657,8 +657,15 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
 
   let pathPairs = pathParameters.map { parameter in
     let key = parameter.kind == .wildcard ? "*" : parameter.label
-    return "(\"\(key)\", RouteValueLiteral(\(parameter.label)))"
+    return "\"\(key)\": RouteValueLiteral(\(parameter.label))"
   }.joined(separator: ", ")
+
+  let paramsBuilder: String
+  if pathPairs.isEmpty {
+    paramsBuilder = "let params = RouteParameters()"
+  } else {
+    paramsBuilder = "let params: RouteParameters = [\(pathPairs)]"
+  }
 
   let queryBuilder: String
   if queryParameters.isEmpty {
@@ -685,7 +692,7 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
 
   return """
       \(access)func \(route.name)Href(\(signatureParameters)) throws(RouteMatchError) -> String {
-        let params = RouteParameters(\(pathPairs))
+        \(paramsBuilder)
         \(queryBuilder)
         return try tree.href(to: handles.\(route.name), params: params, query: query, hash: hash)
       }
