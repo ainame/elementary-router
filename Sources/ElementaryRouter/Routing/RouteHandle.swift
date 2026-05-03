@@ -60,7 +60,7 @@ public struct RouteErrorContext: Sendable {
   }
 }
 
-public enum RouteRenderResolution: Sendable {
+enum RouteRenderResolution: Sendable {
   case matched(RouteContext)
   case notFound(RouteNotFoundContext)
   case error(RouteErrorContext)

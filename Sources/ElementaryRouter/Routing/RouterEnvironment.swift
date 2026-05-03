@@ -1,6 +1,6 @@
 import ElementaryUI
 
-public protocol RouterNavigation: AnyObject {
+protocol RouterNavigation: AnyObject {
   func href(
     to route: RouteHandle,
     params: RouteParameters,
@@ -23,7 +23,7 @@ public protocol RouterNavigation: AnyObject {
 }
 
 extension EnvironmentValues {
-  @Entry public var router: (any RouterNavigation)? = nil
+  @Entry var router: (any RouterNavigation)? = nil
 }
 
 @View

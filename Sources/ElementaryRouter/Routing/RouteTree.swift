@@ -36,7 +36,7 @@ public struct RouteTree<RouteContent: View> {
     return href
   }
 
-  public func resolve(_ location: RouteLocation) -> RouteRenderResolution {
+  func resolve(_ location: RouteLocation) -> RouteRenderResolution {
     guard let record = findLeafRecord(for: location) else {
       return .notFound(
         RouteNotFoundContext(
