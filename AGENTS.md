@@ -6,6 +6,7 @@
 - Do not use the old names `elementary-ui-router` or `ElementaryUIRouter` in new code, docs, examples, or generated files.
 - Version `0.0.1` is the first releasable API shape, but the library is still pre-1.0 and has no compatibility contract. Prefer the best final API shape over preserving temporary APIs.
 - The router is a URL state router for ElementaryUI running on Swift/WASM. Form actions, non-GET mutations, server functions, SSR, hydration, and loader caching are out of scope until the route tree and rendering model are stable.
+- Align with ElementaryUI's Road to 1.0 direction: https://elementary.codes/guide/introduction#the-road-to-10. ElementaryUI explicitly lists a client-side router as future core work, while keeping Embedded Swift compatibility, compile-time macros, and web-native HTML/CSS/DOM control central. This library does not need to match a future upstream API exactly, but it should avoid diverging from those constraints.
 
 ## Implementation Constraints
 
