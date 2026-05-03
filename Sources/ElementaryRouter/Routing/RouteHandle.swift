@@ -2,7 +2,7 @@ public struct RouteID: Hashable, Equatable, Sendable {
   let rawValue: Int
 }
 
-public struct RouteHandle: Hashable, Equatable, Sendable {
+public struct RouteHandle: Hashable, Equatable, Sendable, Identifiable {
   public let id: RouteID
 }
 
