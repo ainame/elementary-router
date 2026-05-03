@@ -31,6 +31,7 @@
 - `Link` cannot fully intercept client navigation until ElementaryUI exposes enough event API to call `preventDefault` for eligible clicks.
 - The current app-level workaround is to have `Link` emit `data-router-link="true"` and add a capture-phase HTML script that calls `preventDefault()` for eligible same-origin clicks before ElementaryUI's Swift `onClick` handler runs. Keep this documented as a workaround, not the final library contract.
 - Nested route rendering is implemented through typed `@Layout` and `Outlet<Content>`; avoid runtime-erased outlet designs unless the route identity model is redesigned.
+- TODO: after route-set factories like `AppRoutes.router()` / `routeSet.router()` are fully adopted, re-evaluate whether `RouterProvider` + `Link` should stay public or be reduced in favor of direct-router links so the convenience layer no longer depends on `RouterNavigation`.
 
 ## Release Hygiene
 

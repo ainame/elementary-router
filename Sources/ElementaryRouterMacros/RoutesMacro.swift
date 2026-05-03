@@ -544,6 +544,14 @@ private func routeSetDeclaration(
           self.handles = handles
         }
 
+        \(access)func router() -> Router<RouteView> {
+          Router(routes: tree)
+        }
+
+        \(access)func hashRouter() -> HashRouter<RouteView> {
+          HashRouter(routes: tree)
+        }
+
       \(hrefs)
       }
     """
@@ -591,6 +599,14 @@ private func routesFunctionDeclaration(
           tree: try collection.freeze(),
           handles: Handles(\(handles))
         )
+      }
+
+      \(access)static func router() throws(RouteTreeError) -> Router<RouteView> {
+        try routes().router()
+      }
+
+      \(access)static func hashRouter() throws(RouteTreeError) -> HashRouter<RouteView> {
+        try routes().hashRouter()
       }
     """
 }

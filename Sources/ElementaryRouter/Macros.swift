@@ -1,4 +1,12 @@
-@attached(member, names: named(RouteView), named(RouteSet), named(Handles), named(routes))
+@attached(
+  member,
+  names: named(RouteView),
+  named(RouteSet),
+  named(Handles),
+  named(routes),
+  named(router),
+  named(hashRouter)
+)
 public macro Routes() = #externalMacro(module: "ElementaryRouterMacros", type: "RoutesMacro")
 
 @attached(peer, names: arbitrary)

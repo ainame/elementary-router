@@ -67,6 +67,14 @@ final class RoutesMacroTests: XCTestCase {
                 self.handles = handles
               }
 
+              func router() -> Router<RouteView> {
+                Router(routes: tree)
+              }
+
+              func hashRouter() -> HashRouter<RouteView> {
+                HashRouter(routes: tree)
+              }
+
               func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
               let params: RouteParameters = ["id": RouteValueLiteral(id)]
                 var query = RouteParameters()
@@ -88,6 +96,14 @@ final class RoutesMacroTests: XCTestCase {
                 tree: try collection.freeze(),
                 handles: Handles(user: user)
               )
+            }
+
+            static func router() throws(RouteTreeError) -> Router<RouteView> {
+              try routes().router()
+            }
+
+            static func hashRouter() throws(RouteTreeError) -> HashRouter<RouteView> {
+              try routes().hashRouter()
             }
         }
         """,
@@ -183,6 +199,14 @@ final class RoutesMacroTests: XCTestCase {
                 self.handles = handles
               }
 
+              func router() -> Router<RouteView> {
+                Router(routes: tree)
+              }
+
+              func hashRouter() -> HashRouter<RouteView> {
+                HashRouter(routes: tree)
+              }
+
               func validHref(hash: String = "") throws(RouteMatchError) -> String {
               let params = RouteParameters()
               let query = RouteParameters()
@@ -201,6 +225,14 @@ final class RoutesMacroTests: XCTestCase {
                 tree: try collection.freeze(),
                 handles: Handles(valid: valid)
               )
+            }
+
+            static func router() throws(RouteTreeError) -> Router<RouteView> {
+              try routes().router()
+            }
+
+            static func hashRouter() throws(RouteTreeError) -> HashRouter<RouteView> {
+              try routes().hashRouter()
             }
         }
         """,
@@ -286,6 +318,14 @@ final class RoutesMacroTests: XCTestCase {
                 self.handles = handles
               }
 
+              func router() -> Router<RouteView> {
+                Router(routes: tree)
+              }
+
+              func hashRouter() -> HashRouter<RouteView> {
+                HashRouter(routes: tree)
+              }
+
               func userHref(hash: String = "") throws(RouteMatchError) -> String {
               let params = RouteParameters()
               let query = RouteParameters()
@@ -304,6 +344,14 @@ final class RoutesMacroTests: XCTestCase {
                 tree: try collection.freeze(),
                 handles: Handles(user: user)
               )
+            }
+
+            static func router() throws(RouteTreeError) -> Router<RouteView> {
+              try routes().router()
+            }
+
+            static func hashRouter() throws(RouteTreeError) -> HashRouter<RouteView> {
+              try routes().hashRouter()
             }
         }
         """,

@@ -74,7 +74,13 @@ Create a router from the generated route set:
 
 ```swift
 let routeSet = try AppRoutes.routes()
-let router = Router(routes: routeSet.tree)
+let router = routeSet.router()
+```
+
+If you only need the router and not the generated handles, use the convenience factory:
+
+```swift
+let router = try AppRoutes.router()
 ```
 
 Render the current route with the generated typed route view:
@@ -248,6 +254,10 @@ lookup. `Link(to:)` remains available as a convenience when the router is
 installed with `RouterProvider`, but that path stores navigation in
 ElementaryUI's environment as an existential value and is not the strictest
 Embedded Swift shape.
+
+TODO: once the route-set factory path is fully adopted across the public API,
+re-evaluate whether `RouterProvider` + `Link` should remain or be reduced in
+favor of direct-router links.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call
