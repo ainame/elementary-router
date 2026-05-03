@@ -33,7 +33,8 @@
 - Keep the root `README.md` focused on the public 0.0.1 API, installation, known blockers, and example usage.
 - Do not commit vendored ElementaryUI experiments, temporary TODO files, generated build output, `node_modules`, or Vite `dist`.
 - `Examples/RouterExample` should build against the local package path and upstream `elementary-ui`.
-- If the Link interception workaround changes, update both `README.md` and `Examples/RouterExample/index.html`.
+- `Examples/TodoApp` should build against the local package path and upstream `elementary-ui`.
+- If the Link interception workaround changes, update `README.md` and each example `index.html`.
 
 ## Style
 
@@ -48,10 +49,12 @@
 Run these before handing off Swift changes:
 
 ```sh
-swift-format lint --configuration .swift-format Package.swift Sources Tests Examples/RouterExample/Package.swift Examples/RouterExample/Sources --recursive --parallel
+swift-format lint --configuration .swift-format Package.swift Sources Tests Examples/RouterExample/Package.swift Examples/RouterExample/Sources Examples/TodoApp/Package.swift Examples/TodoApp/Sources --recursive --parallel
 swift test
 cd Examples/RouterExample && swift build
 cd Examples/RouterExample && npm run build
+cd Examples/TodoApp && swift build
+cd Examples/TodoApp && npm run build
 ```
 
 For Markdown-only changes, Swift builds are not required unless the documentation changes executable snippets or package names.

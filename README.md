@@ -299,5 +299,7 @@ Out of scope for 0.0.1:
 
 ## Example
 
-See [Examples/RouterExample](Examples/RouterExample) for a Vite + Swift/WASM app
-using the local package.
+Available examples:
+
+- [Examples/RouterExample](Examples/RouterExample): a compact routing feature tour
+- [Examples/TodoApp](Examples/TodoApp): a practical task manager with shared app state, filters, detail routes, and stats
