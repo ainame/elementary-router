@@ -264,8 +264,6 @@ behavior.
 `AppRoutes.Provider` installs a concrete `Router<AppRoutes.RouteView>` or
 `HashRouter<AppRoutes.RouteView>` in ElementaryUI's environment, and
 `AppRoutes.Link(to:)` reads that typed router back without existential erasure.
-`RouterLink(router:to:)` remains available when you want the router to stay
-explicit at the call site.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call
@@ -316,7 +314,6 @@ In scope for 0.0.1:
 - browser routing, hash routing, and internal test adapters
 - route handles, href helpers, active matching, not-found, and route-error fallback rendering
 - typed route-set `Provider` and `Link` generation
-- direct-router `RouterLink` when explicit router injection is preferred
 
 Out of scope for 0.0.1:
 
