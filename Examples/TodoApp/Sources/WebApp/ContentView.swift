@@ -6,7 +6,7 @@ struct ContentView {
   @State var store = TodoStore()
 
   let routeSet: AppRoutes.RouteSet
-  let router: BrowserRouter<AppRoutes.RouteView>
+  let router: Router<AppRoutes.RouteView>
 
   var body: some View {
     RouterProvider(router) {

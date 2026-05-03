@@ -58,7 +58,7 @@ struct MacroLayoutRoutes {
 
 @Test func routesMacroGeneratesRouteSetAndTypedRouteView() throws {
   let routeSet = try MacroRoutes.routes()
-  let router = Router(routes: routeSet.tree, history: MemoryHistory(initialPath: "/users/42"))
+  let router = MemoryRouter(routes: routeSet.tree, history: MemoryHistory(initialPath: "/users/42"))
 
   #expect(router.currentMatch?.route == routeSet.handles.user)
   #expect(router.currentMatch?.params.get("id") == "42")
@@ -71,7 +71,7 @@ struct MacroLayoutRoutes {
 
 @Test func routesMacroComposesLayoutRoutes() throws {
   let routeSet = try MacroLayoutRoutes.routes()
-  let router = Router(
+  let router = MemoryRouter(
     routes: routeSet.tree,
     history: MemoryHistory(initialPath: "/teams/7/members/42")
   )
@@ -215,7 +215,7 @@ struct MacroLayoutRoutes {
   let profile = routes.route("/:lang/profile/:profileId") { EmptyHTML() }
   let tree = try routes.freeze()
   let history = MemoryHistory(initialPath: "/")
-  let router = Router(routes: tree, history: history)
+  let router = MemoryRouter(routes: tree, history: history)
 
   #expect(router.currentMatch?.route == home)
 
@@ -237,7 +237,7 @@ struct MacroLayoutRoutes {
   let users = routes.route("/users") { EmptyHTML() }
   let user = routes.children(of: users).route(":id") { EmptyHTML() }
   let tree = try routes.freeze()
-  let router = Router(routes: tree, history: MemoryHistory(initialPath: "/users/42"))
+  let router = MemoryRouter(routes: tree, history: MemoryHistory(initialPath: "/users/42"))
 
   #expect(router.matches.map(\.route) == [users, user])
   #expect(router.currentMatch?.params.get("id") == "42")
@@ -248,7 +248,7 @@ struct MacroLayoutRoutes {
   let users = routes.route("/users") { EmptyHTML() }
   let user = routes.children(of: users).route(":id") { EmptyHTML() }
   let tree = try routes.freeze()
-  let router = Router(
+  let router = MemoryRouter(
     routes: tree,
     history: MemoryHistory(initialPath: "/users/42?tab=posts#details")
   )

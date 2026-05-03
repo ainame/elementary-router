@@ -13,10 +13,13 @@
 - Production source must not import `Foundation`.
 - Keep Embedded Swift compatibility in mind. Avoid APIs that are known to be fragile there, including unnecessary existential errors, `weak` references in core types, and Foundation-backed URL parsing.
 - Use `ElementaryUI`, `Reactivity`, and `JavaScriptKit` directly. Do not depend on ElementaryUI internal browser interop APIs.
-- Browser integration should remain adapter-based:
+- Public routing modes should stay simple:
+  - `Router` for standard browser path routing.
+  - `HashRouter` for static hosting fallback via hash-based routing.
+- Internal browser integration should remain adapter-based:
   - `BrowserHistory` for JavaScriptKit-backed browser history.
+  - `HashHistory` behind `HashRouter`.
   - internal `MemoryHistory` for tests and non-JS fallback.
-  - `HashHistory` for static hosting fallback.
 - Use `RouteParameters` for path params and query params. It supports dictionary literals and tuple-list initialization.
 - `RouteHandle` and `RouteID` should be created by route registration only. Do not add public initializers unless the route identity model is redesigned.
 - `Router.matches` is the parent-to-leaf match stack. `Router.currentMatch` is only a leaf convenience.

@@ -1,8 +1,9 @@
 import ElementaryUI
 
 @View
-public struct RouterLink<RouteContent: View, History: RouterHistory, Content: View> {
-  let router: Router<RouteContent, History>
+public struct RouterLink<Content: View> {
+  let hrefForRoute: () throws -> String
+  let navigateToRoute: (_ replace: Bool) throws -> Void
   let route: RouteHandle
   let params: RouteParameters
   let query: RouteParameters
@@ -11,8 +12,8 @@ public struct RouterLink<RouteContent: View, History: RouterHistory, Content: Vi
   let target: HTMLAttributeValue.Target?
   let content: Content
 
-  public init(
-    router: Router<RouteContent, History>,
+  public init<RouteContent: View>(
+    router: Router<RouteContent>,
     to route: RouteHandle,
     params: RouteParameters = RouteParameters(),
     query: RouteParameters = RouteParameters(),
@@ -21,7 +22,45 @@ public struct RouterLink<RouteContent: View, History: RouterHistory, Content: Vi
     target: HTMLAttributeValue.Target? = nil,
     @HTMLBuilder content: () -> Content
   ) {
-    self.router = router
+    self.hrefForRoute = { try router.href(to: route, params: params, query: query, hash: hash) }
+    self.navigateToRoute = { shouldReplace in
+      try router.navigate(
+        to: route,
+        params: params,
+        query: query,
+        hash: hash,
+        replace: shouldReplace
+      )
+    }
+    self.route = route
+    self.params = params
+    self.query = query
+    self.hash = hash
+    self.replace = replace
+    self.target = target
+    self.content = content()
+  }
+
+  public init<RouteContent: View>(
+    router: HashRouter<RouteContent>,
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = "",
+    replace: Bool = false,
+    target: HTMLAttributeValue.Target? = nil,
+    @HTMLBuilder content: () -> Content
+  ) {
+    self.hrefForRoute = { try router.href(to: route, params: params, query: query, hash: hash) }
+    self.navigateToRoute = { shouldReplace in
+      try router.navigate(
+        to: route,
+        params: params,
+        query: query,
+        hash: hash,
+        replace: shouldReplace
+      )
+    }
     self.route = route
     self.params = params
     self.query = query
@@ -63,16 +102,10 @@ public struct RouterLink<RouteContent: View, History: RouterHistory, Content: Vi
       return
     }
 
-    try? router.navigate(
-      to: route,
-      params: params,
-      query: query,
-      hash: hash,
-      replace: replace
-    )
+    try? navigateToRoute(replace)
   }
 
   private var href: String {
-    (try? router.href(to: route, params: params, query: query, hash: hash)) ?? "#"
+    (try? hrefForRoute()) ?? "#"
   }
 }

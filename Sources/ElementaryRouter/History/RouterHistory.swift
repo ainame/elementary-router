@@ -1,4 +1,4 @@
-public protocol RouterHistory: AnyObject {
+protocol RouterHistory: AnyObject {
   var location: RouteLocation { get }
   func push(_ location: RouteLocation)
   func replace(_ location: RouteLocation)
@@ -9,17 +9,5 @@ public protocol RouterHistory: AnyObject {
 extension RouterHistory where Self == MemoryHistory {
   static func memory(initialPath: String = "/") -> MemoryHistory {
     MemoryHistory(initialPath: initialPath)
-  }
-}
-
-extension RouterHistory where Self == BrowserHistory {
-  public static func browser() -> BrowserHistory {
-    BrowserHistory()
-  }
-}
-
-extension RouterHistory where Self == HashHistory {
-  public static func hash() -> HashHistory {
-    HashHistory()
   }
 }

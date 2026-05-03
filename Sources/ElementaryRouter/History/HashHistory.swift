@@ -1,11 +1,11 @@
-public final class HashHistory: RouterHistory {
+final class HashHistory: RouterHistory {
   private let browser: BrowserHistory
 
-  public init() {
+  init() {
     self.browser = BrowserHistory()
   }
 
-  public var location: RouteLocation {
+  var location: RouteLocation {
     let hash = browser.location.hash
     if hash.isEmpty {
       return RouteLocation()
@@ -13,19 +13,19 @@ public final class HashHistory: RouterHistory {
     return RouteLocation(url: hash)
   }
 
-  public func push(_ location: RouteLocation) {
+  func push(_ location: RouteLocation) {
     browser.push(RouteLocation(path: browser.location.path, hash: location.href))
   }
 
-  public func replace(_ location: RouteLocation) {
+  func replace(_ location: RouteLocation) {
     browser.replace(RouteLocation(path: browser.location.path, hash: location.href))
   }
 
-  public func go(_ delta: Int) {
+  func go(_ delta: Int) {
     browser.go(delta)
   }
 
-  public func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription {
+  func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription {
     browser.listen { update in
       listener(HistoryUpdate(action: update.action, location: self.location))
     }

@@ -1,12 +1,23 @@
 import ElementaryUI
 
 @View
-public struct RouterProvider<RouteContent: View, History: RouterHistory, Content: View> {
-  let router: Router<RouteContent, History>
+public struct RouterProvider<Content: View> {
+  let router: any RouterNavigation
   let content: Content
 
-  public init(_ router: Router<RouteContent, History>, @HTMLBuilder content: () -> Content) {
-    self.router = router
+  public init<RouteContent: View>(
+    _ router: Router<RouteContent>,
+    @HTMLBuilder content: () -> Content
+  ) {
+    self.router = router.navigation
+    self.content = content()
+  }
+
+  public init<RouteContent: View>(
+    _ router: HashRouter<RouteContent>,
+    @HTMLBuilder content: () -> Content
+  ) {
+    self.router = router.navigation
     self.content = content()
   }
 

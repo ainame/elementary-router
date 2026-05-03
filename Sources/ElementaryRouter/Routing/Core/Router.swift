@@ -17,7 +17,7 @@ final class RouterState {
   }
 }
 
-public final class Router<RouteContent: View, History: RouterHistory> {
+public final class Router<RouteContent: View> {
   public struct ActiveMatchOptions: Equatable, Sendable {
     public var includeDescendants: Bool
     public var params: RouteParameters?
@@ -45,12 +45,166 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     }
   }
 
+  private let storage: HistoryRouter<RouteContent, BrowserHistory>
+
+  public init(routes: RouteTree<RouteContent>) {
+    self.storage = HistoryRouter(routes: routes, history: BrowserHistory())
+  }
+
+  var navigation: any RouterNavigation {
+    storage
+  }
+
+  public var location: RouteLocation {
+    storage.location
+  }
+
+  public var matches: [RouteMatch] {
+    storage.matches
+  }
+
+  public var currentMatch: RouteMatch? {
+    storage.currentMatch
+  }
+
+  public func href(
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = ""
+  ) throws(RouteMatchError) -> String {
+    try storage.href(to: route, params: params, query: query, hash: hash)
+  }
+
+  public func navigate(
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = "",
+    replace: Bool = false
+  ) throws(RouteMatchError) {
+    try storage.navigate(to: route, params: params, query: query, hash: hash, replace: replace)
+  }
+
+  public func navigate(to location: RouteLocation, replace: Bool = false) {
+    storage.navigate(to: location, replace: replace)
+  }
+
+  public func replace(
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = ""
+  ) throws(RouteMatchError) {
+    try storage.replace(to: route, params: params, query: query, hash: hash)
+  }
+
+  public func back() {
+    storage.back()
+  }
+
+  public func forward() {
+    storage.forward()
+  }
+
+  public func isActive(
+    _ route: RouteHandle,
+    options: ActiveMatchOptions = .exact
+  ) -> Bool {
+    storage.isActive(route, options: options)
+  }
+
+  public func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
+    try storage.renderCurrentRoute()
+  }
+}
+
+public final class HashRouter<RouteContent: View> {
+  public typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
+
+  private let storage: HistoryRouter<RouteContent, HashHistory>
+
+  public init(routes: RouteTree<RouteContent>) {
+    self.storage = HistoryRouter(routes: routes, history: HashHistory())
+  }
+
+  var navigation: any RouterNavigation {
+    storage
+  }
+
+  public var location: RouteLocation {
+    storage.location
+  }
+
+  public var matches: [RouteMatch] {
+    storage.matches
+  }
+
+  public var currentMatch: RouteMatch? {
+    storage.currentMatch
+  }
+
+  public func href(
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = ""
+  ) throws(RouteMatchError) -> String {
+    try storage.href(to: route, params: params, query: query, hash: hash)
+  }
+
+  public func navigate(
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = "",
+    replace: Bool = false
+  ) throws(RouteMatchError) {
+    try storage.navigate(to: route, params: params, query: query, hash: hash, replace: replace)
+  }
+
+  public func navigate(to location: RouteLocation, replace: Bool = false) {
+    storage.navigate(to: location, replace: replace)
+  }
+
+  public func replace(
+    to route: RouteHandle,
+    params: RouteParameters = RouteParameters(),
+    query: RouteParameters = RouteParameters(),
+    hash: String = ""
+  ) throws(RouteMatchError) {
+    try storage.replace(to: route, params: params, query: query, hash: hash)
+  }
+
+  public func back() {
+    storage.back()
+  }
+
+  public func forward() {
+    storage.forward()
+  }
+
+  public func isActive(
+    _ route: RouteHandle,
+    options: ActiveMatchOptions = .exact
+  ) -> Bool {
+    storage.isActive(route, options: options)
+  }
+
+  public func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
+    try storage.renderCurrentRoute()
+  }
+}
+
+final class HistoryRouter<RouteContent: View, History: RouterHistory>: RouterNavigation {
+  typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
+
   private let state: RouterState
   private let routes: RouteTree<RouteContent>
   private let history: History
   private var subscription: HistorySubscription?
 
-  public init(routes: RouteTree<RouteContent>, history: History) {
+  init(routes: RouteTree<RouteContent>, history: History) {
     self.routes = routes
     self.history = history
     self.state = RouterState(location: history.location, matches: routes.matches(history.location))
@@ -64,19 +218,19 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     subscription?.cancel()
   }
 
-  public var location: RouteLocation {
+  var location: RouteLocation {
     state.location
   }
 
-  public var matches: [RouteMatch] {
+  var matches: [RouteMatch] {
     state.matches
   }
 
-  public var currentMatch: RouteMatch? {
+  var currentMatch: RouteMatch? {
     matches.last
   }
 
-  public func href(
+  func href(
     to route: RouteHandle,
     params: RouteParameters = RouteParameters(),
     query: RouteParameters = RouteParameters(),
@@ -85,7 +239,7 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     try routes.href(to: route, params: params, query: query, hash: hash)
   }
 
-  public func navigate(
+  func navigate(
     to route: RouteHandle,
     params: RouteParameters = RouteParameters(),
     query: RouteParameters = RouteParameters(),
@@ -96,7 +250,7 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     navigate(to: RouteLocation(url: href), replace: replace)
   }
 
-  public func navigate(to location: RouteLocation, replace: Bool = false) {
+  func navigate(to location: RouteLocation, replace: Bool = false) {
     if replace {
       history.replace(location)
     } else {
@@ -105,7 +259,7 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     apply(location)
   }
 
-  public func replace(
+  func replace(
     to route: RouteHandle,
     params: RouteParameters = RouteParameters(),
     query: RouteParameters = RouteParameters(),
@@ -114,15 +268,15 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     try navigate(to: route, params: params, query: query, hash: hash, replace: true)
   }
 
-  public func back() {
+  func back() {
     history.go(-1)
   }
 
-  public func forward() {
+  func forward() {
     history.go(1)
   }
 
-  public func isActive(
+  func isActive(
     _ route: RouteHandle,
     options: ActiveMatchOptions = .exact
   ) -> Bool {
@@ -160,7 +314,7 @@ public final class Router<RouteContent: View, History: RouterHistory> {
     routes.resolve(location)
   }
 
-  public func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
+  func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
     try routes.render(location)
   }
 
@@ -169,8 +323,4 @@ public final class Router<RouteContent: View, History: RouterHistory> {
   }
 }
 
-extension Router: RouterNavigation {}
-
-public typealias BrowserRouter<RouteContent: View> = Router<RouteContent, BrowserHistory>
-public typealias HashRouter<RouteContent: View> = Router<RouteContent, HashHistory>
-typealias MemoryRouter<RouteContent: View> = Router<RouteContent, MemoryHistory>
+typealias MemoryRouter<RouteContent: View> = HistoryRouter<RouteContent, MemoryHistory>

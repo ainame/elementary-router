@@ -1,4 +1,4 @@
-public enum HistoryAction: Equatable, Sendable {
+enum HistoryAction: Equatable, Sendable {
   case push
   case replace
   case pop

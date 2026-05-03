@@ -74,7 +74,7 @@ Create a router from the generated route set:
 
 ```swift
 let routeSet = try AppRoutes.routes()
-let router = Router(routes: routeSet.tree, history: BrowserHistory())
+let router = Router(routes: routeSet.tree)
 ```
 
 Render the current route with the generated typed route view:
@@ -222,8 +222,8 @@ an invalid `Int` path parameter.
 
 - `Router.matches` is the parent-to-leaf match stack.
 - `Router.currentMatch` is a leaf convenience.
-- `Router` is generic over its history adapter, so core navigation does not store
-  `any RouterHistory` existential values.
+- `Router` uses standard browser path routing.
+- `HashRouter` is available when you explicitly want hash-based routing.
 - `@Layout` composes nested route UI through `Outlet<Content>`.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
 - `RouteParameters` is used for both path params and query params.
@@ -295,7 +295,7 @@ In scope for 0.0.1:
 - typed route registration with `@Routes`
 - path params, wildcard params, and typed query params
 - nested typed layouts with `@Layout` and `Outlet<Content>`
-- browser, hash, and memory history adapters
+- browser routing, hash routing, and internal test adapters
 - route handles, href helpers, active matching, not-found, and route-error fallback rendering
 - direct-router `RouterLink` for an Embedded-friendlier link path
 

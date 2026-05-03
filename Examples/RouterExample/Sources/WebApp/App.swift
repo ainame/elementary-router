@@ -5,7 +5,7 @@ import ElementaryUI
 struct App {
   static func main() throws(RouteTreeError) {
     let routeSet = try AppRoutes.routes()
-    let router = Router(routes: routeSet.tree, history: BrowserHistory())
+    let router = Router(routes: routeSet.tree)
     let app = Application(ContentView(routeSet: routeSet, router: router))
     app.mount(in: .body)
   }
