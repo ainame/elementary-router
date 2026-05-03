@@ -34,12 +34,17 @@ let package = Package(
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
       ]
     ),
+    .target(
+      name: "XCTest",
+      dependencies: []
+    ),
     .testTarget(
       name: "ElementaryRouterTests",
       dependencies: [
         "ElementaryRouter",
         "ElementaryRouterMacros",
-        .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
+        "XCTest",
+        .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
       ]
     ),
   ],
