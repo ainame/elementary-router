@@ -105,6 +105,118 @@ Link(
 let href = try routeSet.profileHref(lang: "ja", profileId: 42, tab: "posts")
 ```
 
+## Macros
+
+### `@Routes`
+
+Attach `@Routes` to a `struct` that declares the route set:
+
+```swift
+@Routes
+struct AppRoutes {
+  // @Route, @Layout, @NotFound, and @RouteError declarations go here.
+}
+```
+
+The macro generates:
+
+- `AppRoutes.RouteView`: a single typed view union for all route outputs
+- `AppRoutes.Handles`: named route handles
+- `AppRoutes.RouteSet`: the generated route tree plus handles
+- `AppRoutes.routes()`: the factory used to build a router
+- route-specific href helpers, such as `profileHref(...)`
+
+Route declarations must be `static func` members inside the `@Routes` struct.
+The macro intentionally does not discover routes from extensions or unrelated
+types.
+
+### `@Route`
+
+Use `@Route` for a leaf page route:
+
+```swift
+@Route("/:lang/profile/:profileId")
+static func profile(
+  lang: String,
+  profileId: Int,
+  tab: Query<String> = Query("overview")
+) -> ProfilePage {
+  ProfilePage(lang: lang, profileID: profileId, tab: tab.value)
+}
+```
+
+Path parameters use `:name` syntax and must have matching function parameters.
+Parameter values are decoded from strings using `RouteValue`. Built-in support
+includes common scalar types such as `String`, `Int`, `Double`, and `Bool`.
+
+Query parameters are declared with `Query<T>` function parameters. A default
+value, such as `Query("overview")`, makes the query parameter optional for href
+generation and route rendering.
+
+Wildcard routes use `*` and must declare a `Wildcard` parameter:
+
+```swift
+@Route("/docs/*")
+static func docs(splat: Wildcard) -> DocsPage {
+  DocsPage(slug: splat.value)
+}
+```
+
+The generated handle and href helper use the route function name:
+
+```swift
+routeSet.handles.profile
+try routeSet.profileHref(lang: "ja", profileId: 42, tab: "posts")
+```
+
+### `@Layout`
+
+Use `@Layout` for a parent route that wraps matching child routes:
+
+```swift
+@Layout("/:lang")
+static func languageLayout<Content: View>(
+  lang: String,
+  outlet: Outlet<Content>
+) -> LanguageLayout<Content> {
+  LanguageLayout(lang: lang, outlet: outlet)
+}
+```
+
+A layout route must accept `Outlet<Content>` and return a view that renders that
+outlet. Child routes matched under the layout are composed into the outlet by
+the generated typed `RouteView`.
+
+### `@NotFound`
+
+Use `@NotFound` to declare the route set's not-found fallback:
+
+```swift
+@NotFound
+static func notFound(context: RouteNotFoundContext) -> NotFoundPage {
+  NotFoundPage(path: context.location.path)
+}
+```
+
+`RouteNotFoundContext` provides the requested `location` and parsed `query`.
+For 0.0.1, this is route-set level fallback policy. Per-route not-found
+propagation similar to TanStack Router is not implemented yet.
+
+### `@RouteError`
+
+Use `@RouteError` to declare the route set's route-value error fallback:
+
+```swift
+@RouteError
+static func routeError(context: RouteErrorContext) -> InvalidRoutePage {
+  InvalidRoutePage(error: context.error)
+}
+```
+
+`RouteErrorContext` includes the `RouteValueError` and the route context that
+failed to render. This currently handles route value decoding errors, such as
+an invalid `Int` path parameter.
+
 ## Routing Model
 
 - `Router.matches` is the parent-to-leaf match stack.
