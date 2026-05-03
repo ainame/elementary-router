@@ -58,6 +58,8 @@ cd Examples/TodoApp && swift build
 cd Examples/TodoApp && npm run build
 ```
 
+- On macOS when using a `swiftly` OSS toolchain, XCTest-based test targets may fail under plain `swift test` because XCTest is resolved from Apple's developer environment. In that case, run `xcrun swift test` instead. Do not add an `XCTest` package dependency or local shim target for this.
+
 For Markdown-only changes, Swift builds are not required unless the documentation changes executable snippets or package names.
 
 ## External Research
