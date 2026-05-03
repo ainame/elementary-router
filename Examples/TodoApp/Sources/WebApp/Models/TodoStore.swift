@@ -1,22 +1,4 @@
-import ElementaryUI
 import Reactivity
-
-extension EnvironmentValues {
-  @Entry var todoRouteSet: AppRoutes.RouteSet? = nil
-}
-
-struct TodoItem: Equatable, Sendable {
-  let id: Int
-  var title: String
-  var project: String
-  var isCompleted: Bool
-}
-
-enum TodoFilter: String, Equatable, Sendable {
-  case all = "All"
-  case active = "Active"
-  case completed = "Completed"
-}
 
 @Reactive
 final class TodoStore {
@@ -108,7 +90,7 @@ final class TodoStore {
 }
 
 extension String {
-  func emptyFallback(_ fallback: String) -> String {
+  fileprivate func emptyFallback(_ fallback: String) -> String {
     isEmpty ? fallback : self
   }
 }
