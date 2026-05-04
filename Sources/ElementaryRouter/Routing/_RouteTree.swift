@@ -1,5 +1,10 @@
 import ElementaryUI
 
+public enum RouteMatchError: Error, Equatable, Sendable {
+  case unknownRoute
+  case missingRequiredParameter(name: String)
+}
+
 public struct _RouteTree<RouteContent: View> {
   struct Record {
     let handle: RouteHandle

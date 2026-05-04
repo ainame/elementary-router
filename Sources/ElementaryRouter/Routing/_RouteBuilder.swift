@@ -1,5 +1,10 @@
 import ElementaryUI
 
+public enum RouteTreeError: Error, Equatable, Sendable {
+  case duplicateRoute(path: String)
+  case duplicateParameter(path: String, name: String)
+}
+
 public final class _RouteBuilder<RouteContent: View> {
   private var records: [RecordBuilder] = []
   private var notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
