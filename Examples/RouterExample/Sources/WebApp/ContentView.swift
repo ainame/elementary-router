@@ -2,8 +2,14 @@ import ElementaryRouter
 import ElementaryUI
 
 @View
-struct ContentView {
+struct ContentView<RouteContent: View> {
   let routes: AppRoutes.RouteSet
+  let routeContent: RouteContent
+
+  init(routes: AppRoutes.RouteSet, @HTMLBuilder routeContent: () -> RouteContent) {
+    self.routes = routes
+    self.routeContent = routeContent()
+  }
 
   var body: some View {
     div(.style(pageStyle)) {
@@ -30,13 +36,7 @@ struct ContentView {
       }
 
       main(.style(mainStyle)) {
-        AppRoutes.RouterView { _, location in
-          AppRoutes.RouteView(
-            storage: .notFound(
-              RouteNotFoundContext(location: location, query: RouteValues())
-            )
-          )
-        }
+        routeContent
       }
     }
   }

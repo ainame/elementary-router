@@ -8,7 +8,15 @@ struct App {
     let router = try AppRoutes.router()
     let app = Application(
       AppRoutes.Provider(router) {
-        ContentView(routes: routes)
+        ContentView(routes: routes) {
+          AppRoutes.RouterView { _, location in
+            AppRoutes.RouteView(
+              storage: .notFound(
+                RouteNotFoundContext(location: location, query: RouteValues())
+              )
+            )
+          }
+        }
       }
     )
     app.mount(in: .body)
