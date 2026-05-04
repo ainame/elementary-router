@@ -96,15 +96,7 @@ Render the current route with the generated typed route view:
 
 ```swift
 AppRoutes.Provider(router) {
-  AppRoutes.RouterView(
-    onError: { _, location in
-      AppRoutes.RouteView(
-        storage: .notFound(
-          RouteNotFoundContext(location: location, query: RouteValues())
-        )
-      )
-    }
-  ) { routeContent in
+  AppRoutes.RouterView { routeContent in
     div {
       nav {
         AppRoutes.Link(to: routes.handles.home) { "Home" }
@@ -122,15 +114,7 @@ AppRoutes.Provider(router) {
 content into your visible app shell:
 
 ```swift
-AppRoutes.RouterView(
-  onError: { _, location in
-    AppRoutes.RouteView(
-      storage: .notFound(
-        RouteNotFoundContext(location: location, query: RouteValues())
-      )
-    )
-  )
-}) { routeContent in
+AppRoutes.RouterView { routeContent in
   AppLayout(routeContent: routeContent)
 }
 ```

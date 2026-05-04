@@ -8,15 +8,7 @@ struct App {
     let router = try AppRoutes.router()
     let app = Application(
       AppRoutes.Provider(router) {
-        AppRoutes.RouterView(
-          onError: { _, location in
-            AppRoutes.RouteView(
-              storage: .notFound(
-                RouteNotFoundContext(location: location, query: RouteValues())
-              )
-            )
-          }
-        ) { routeContent in
+        AppRoutes.RouterView { routeContent in
           div(.style(pageStyle)) {
             header(.style(headerStyle)) {
               h1(.style(titleStyle)) { "ElementaryUI Router" }

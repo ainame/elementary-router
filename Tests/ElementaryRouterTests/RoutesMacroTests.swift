@@ -105,14 +105,11 @@ final class RoutesMacroTests: XCTestCase {
             struct RouterView<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
-              let renderError: (RouterRenderError, RouteLocation) -> RouteView
               let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
                 @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
-                self.renderError = renderError
                 self.content = content
               }
 
@@ -122,13 +119,13 @@ final class RoutesMacroTests: XCTestCase {
 
               private var rendered: RouteView {
                 guard let router else {
-                  return renderError(.routeNotFound, RouteLocation())
+                  preconditionFailure("AppRoutes.RouterView requires AppRoutes.Provider.")
                 }
 
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
-                  return renderError(error, router.location)
+                  preconditionFailure("AppRoutes.RouterView could not render the current route.")
                 }
               }
             }
@@ -352,14 +349,11 @@ final class RoutesMacroTests: XCTestCase {
             struct RouterView<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
-              let renderError: (RouterRenderError, RouteLocation) -> RouteView
               let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
                 @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
-                self.renderError = renderError
                 self.content = content
               }
 
@@ -369,13 +363,13 @@ final class RoutesMacroTests: XCTestCase {
 
               private var rendered: RouteView {
                 guard let router else {
-                  return renderError(.routeNotFound, RouteLocation())
+                  preconditionFailure("AppRoutes.RouterView requires AppRoutes.Provider.")
                 }
 
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
-                  return renderError(error, router.location)
+                  preconditionFailure("AppRoutes.RouterView could not render the current route.")
                 }
               }
             }
@@ -589,14 +583,11 @@ final class RoutesMacroTests: XCTestCase {
             struct RouterView<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
-              let renderError: (RouterRenderError, RouteLocation) -> RouteView
               let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
                 @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
-                self.renderError = renderError
                 self.content = content
               }
 
@@ -606,13 +597,13 @@ final class RoutesMacroTests: XCTestCase {
 
               private var rendered: RouteView {
                 guard let router else {
-                  return renderError(.routeNotFound, RouteLocation())
+                  preconditionFailure("AppRoutes.RouterView requires AppRoutes.Provider.")
                 }
 
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
-                  return renderError(error, router.location)
+                  preconditionFailure("AppRoutes.RouterView could not render the current route.")
                 }
               }
             }
@@ -811,14 +802,11 @@ final class RoutesMacroTests: XCTestCase {
             struct RouterView<Content: View> {
               @Environment(DocsRoutes._routerEnvironmentKey) var router
 
-              let renderError: (RouterRenderError, RouteLocation) -> RouteView
               let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
                 @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
-                self.renderError = renderError
                 self.content = content
               }
 
@@ -828,13 +816,13 @@ final class RoutesMacroTests: XCTestCase {
 
               private var rendered: RouteView {
                 guard let router else {
-                  return renderError(.routeNotFound, RouteLocation())
+                  preconditionFailure("DocsRoutes.RouterView requires DocsRoutes.Provider.")
                 }
 
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
-                  return renderError(error, router.location)
+                  preconditionFailure("DocsRoutes.RouterView could not render the current route.")
                 }
               }
             }

@@ -628,14 +628,11 @@ private func routerViewDeclaration(
       \(access)struct RouterView<Content: View> {
         @Environment(\(containerName)._routerEnvironmentKey) var router
 
-        let renderError: (RouterRenderError, RouteLocation) -> RouteView
         let content: (RouteView) -> Content
 
         \(access)init(
-          onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
           @HTMLBuilder content: @escaping (RouteView) -> Content
         ) {
-          self.renderError = renderError
           self.content = content
         }
 
@@ -645,13 +642,13 @@ private func routerViewDeclaration(
 
         private var rendered: RouteView {
           guard let router else {
-            return renderError(.routeNotFound, RouteLocation())
+            preconditionFailure("\(containerName).RouterView requires \(containerName).Provider.")
           }
 
           do {
             return try router.renderCurrentRoute()
           } catch {
-            return renderError(error, router.location)
+            preconditionFailure("\(containerName).RouterView could not render the current route.")
           }
         }
       }
