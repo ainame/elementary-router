@@ -81,15 +81,19 @@ public final class RouteBuilder<RouteContent: View> {
   /// Compiles the registered route records into a `RouteTree`.
   public func _build() throws(RouteTreeError) -> RouteTree<RouteContent> {
     var compiled: [RouteTree<RouteContent>.Record] = []
-    var seenPaths: [String] = []
+    var seenRecords: [(path: String, record: RecordBuilder)] = []
     let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })
 
     for record in records {
       let pattern = try RoutePattern(resolvedPath(for: record, recordsByID: recordsByID))
-      if seenPaths.contains(pattern.path) {
+      if seenRecords.contains(where: { seen in
+        seen.path == pattern.path
+          && !isAncestor(record, of: seen.record, recordsByID: recordsByID)
+          && !isAncestor(seen.record, of: record, recordsByID: recordsByID)
+      }) {
         throw RouteTreeError.duplicateRoute(path: pattern.path)
       }
-      seenPaths.append(pattern.path)
+      seenRecords.append((pattern.path, record))
       compiled.append(
         RouteTree.Record(
           handle: record.handle,
@@ -102,9 +106,14 @@ public final class RouteBuilder<RouteContent: View> {
 
     compiled.sort {
       if $0.pattern.specificity == $1.pattern.specificity {
-        $0.handle.id.rawValue < $1.handle.id.rawValue
+        let leftDepth = depth(of: $0, recordsByID: recordsByID)
+        let rightDepth = depth(of: $1, recordsByID: recordsByID)
+        if leftDepth == rightDepth {
+          return $0.handle.id.rawValue < $1.handle.id.rawValue
+        }
+        return leftDepth > rightDepth
       } else {
-        $0.pattern.specificity > $1.pattern.specificity
+        return $0.pattern.specificity > $1.pattern.specificity
       }
     }
 
@@ -132,6 +141,32 @@ public final class RouteBuilder<RouteContent: View> {
     let parent: RouteHandle?
     let path: String
     let render: (RouteContext) throws(RouteValueError) -> RouteContent
+  }
+
+  private func isAncestor(
+    _ ancestor: RecordBuilder,
+    of descendant: RecordBuilder,
+    recordsByID: [RouteHandle.ID: RecordBuilder]
+  ) -> Bool {
+    var current = descendant.parent.flatMap { recordsByID[$0.id] }
+    while let record = current {
+      if record.handle == ancestor.handle { return true }
+      current = record.parent.flatMap { recordsByID[$0.id] }
+    }
+    return false
+  }
+
+  private func depth(
+    of record: RouteTree<RouteContent>.Record,
+    recordsByID: [RouteHandle.ID: RecordBuilder]
+  ) -> Int {
+    var depth = 0
+    var current = record.parent.flatMap { recordsByID[$0.id] }
+    while let record = current {
+      depth += 1
+      current = record.parent.flatMap { recordsByID[$0.id] }
+    }
+    return depth
   }
 
   private func resolvedPath(

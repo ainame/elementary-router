@@ -29,7 +29,8 @@ public enum RoutesMacro: MemberMacro {
     var layouts: [RouteDeclaration] = []
     var notFound: FunctionDeclSyntax?
     var routeError: FunctionDeclSyntax?
-    var seenPaths: [String] = []
+    var seenRoutePaths: [String] = []
+    var seenLayoutPaths: [String] = []
 
     for member in declaration.memberBlock.members {
       guard let function = member.decl.as(FunctionDeclSyntax.self) else {
@@ -51,7 +52,7 @@ public enum RoutesMacro: MemberMacro {
         let route = RouteDeclaration(function: function, path: path)
         validate(route: route, context: context)
 
-        if seenPaths.contains(route.normalizedPath) {
+        if seenRoutePaths.contains(route.normalizedPath) {
           context.diagnose(
             .init(
               node: Syntax(function),
@@ -59,7 +60,7 @@ public enum RoutesMacro: MemberMacro {
             )
           )
         }
-        seenPaths.append(route.normalizedPath)
+        seenRoutePaths.append(route.normalizedPath)
         routes.append(route)
       }
 
@@ -83,7 +84,7 @@ public enum RoutesMacro: MemberMacro {
           )
         }
 
-        if seenPaths.contains(layout.normalizedPath) {
+        if seenLayoutPaths.contains(layout.normalizedPath) {
           context.diagnose(
             .init(
               node: Syntax(function),
@@ -91,7 +92,7 @@ public enum RoutesMacro: MemberMacro {
             )
           )
         }
-        seenPaths.append(layout.normalizedPath)
+        seenLayoutPaths.append(layout.normalizedPath)
         layouts.append(layout)
       }
 
@@ -152,6 +153,9 @@ public enum RoutesMacro: MemberMacro {
         )
       ),
       DeclSyntax(
+        stringLiteral: routeSetEnvironmentKeyDeclaration(containerName: containerName)
+      ),
+      DeclSyntax(
         stringLiteral: providerDeclaration(
           access: access,
           mode: mode,
@@ -161,6 +165,7 @@ public enum RoutesMacro: MemberMacro {
       DeclSyntax(
         stringLiteral: routerViewDeclaration(
           access: access,
+          mode: mode,
           containerName: containerName
         )
       ),
@@ -382,6 +387,7 @@ private func matchingLayouts(for route: RouteDeclaration, layouts: [RouteDeclara
   layouts
     .filter { layout in
       route.normalizedPath == layout.normalizedPath
+        || layout.normalizedPath == "/"
         || route.normalizedPath.hasPrefix(layout.normalizedPath + "/")
     }
     .sorted { $0.depth < $1.depth }
@@ -604,16 +610,30 @@ private func providerDeclaration(
   return """
       @View
       \(access)struct Provider<Content: View> {
+        let routes: RouteSet
         let router: \(router)
         let content: Content
 
         \(access)init(_ router: \(router), @HTMLBuilder content: () -> Content) {
+          do throws(RouteTreeError) {
+            let routes = try \(containerName).routes()
+            self.routes = routes
+            self.router = router
+            self.content = content()
+          } catch {
+            preconditionFailure("\(containerName).Provider could not build routes.")
+          }
+        }
+
+        init(_ router: \(router), routes: RouteSet, @HTMLBuilder content: () -> Content) {
+          self.routes = routes
           self.router = router
           self.content = content()
         }
 
         \(access)var body: some View {
           content.environment(\(containerName)._routerEnvironmentKey, router)
+            .environment(\(containerName)._routeSetEnvironmentKey, routes)
         }
       }
     """
@@ -621,30 +641,33 @@ private func providerDeclaration(
 
 private func routerViewDeclaration(
   access: String,
+  mode: RoutesMode,
   containerName: String
 ) -> String {
+  let router = routerType(mode: mode, routeViewType: "RouteView")
   return """
       @View
-      \(access)struct RouterView<Content: View> {
-        @Environment(\(containerName)._routerEnvironmentKey) var router
+      \(access)struct RouterView {
+        let routes: RouteSet
+        let router: \(router)
 
-        let content: (RouteView) -> Content
-
-        \(access)init(
-          @HTMLBuilder content: @escaping (RouteView) -> Content
-        ) {
-          self.content = content
+        \(access)init() {
+          do throws(RouteTreeError) {
+            let routes = try \(containerName).routes()
+            self.routes = routes
+            self.router = routes.router()
+          } catch {
+            preconditionFailure("\(containerName).RouterView could not build routes.")
+          }
         }
 
         \(access)var body: some View {
-          content(rendered)
+          Provider(router, routes: routes) {
+            rendered
+          }
         }
 
         private var rendered: RouteView {
-          guard let router else {
-            preconditionFailure("\(containerName).RouterView requires \(containerName).Provider.")
-          }
-
           do {
             return try router.renderCurrentRoute()
           } catch {
@@ -746,6 +769,15 @@ private func routerEnvironmentKeyDeclaration(
   return """
       static let _routerEnvironmentKey = EnvironmentValues._Key<\(router)?>(
         "ElementaryRouter.\(containerName).router",
+        defaultValue: nil
+      )
+    """
+}
+
+private func routeSetEnvironmentKeyDeclaration(containerName: String) -> String {
+  return """
+      static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
+        "ElementaryRouter.\(containerName).routes",
         defaultValue: nil
       )
     """

@@ -362,6 +362,31 @@ struct MacroLayoutRoutes {
   #expect(rendered == ["layout:ja", "profile:42"])
 }
 
+@Test func routeTreeAllowsIndexRouteInsideRootLayout() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  var rendered: [String] = []
+  let layout = routes._route("/") {
+    rendered.append("layout")
+    return EmptyHTML()
+  }
+  let index = routes._route("/", parent: layout) {
+    rendered.append("index")
+    return EmptyHTML()
+  }
+  let tree = try routes._build()
+
+  if case .matched(let context) = tree._resolve(RouteLocation(url: "/")) {
+    #expect(context.route == index)
+    #expect(context.matchedRoutes == [layout, index])
+  } else {
+    Issue.record("Expected root index route")
+  }
+
+  rendered = []
+  _ = try tree._render(RouteLocation(url: "/"))
+  #expect(rendered == ["layout", "index"])
+}
+
 @Test func routeTreeReportsParentRouteValueErrorsBeforeRenderingChildren() throws {
   let routes = RouteBuilder<EmptyHTML>()
   var childRendered = false

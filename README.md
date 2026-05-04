@@ -70,17 +70,19 @@ struct AppRoutes {
 }
 ```
 
-Create a router from the route declaration:
+For normal apps, mount the generated router view directly:
 
 ```swift
-let router = try AppRoutes.router()
+let app = Application(AppRoutes.RouterView())
+app.mount(in: .body)
 ```
 
-If you also need the generated handles or href helpers, build the route set separately:
+If you need programmatic access to generated handles, href helpers, or the router,
+build the route set explicitly:
 
 ```swift
 let routes = try AppRoutes.routes()
-let router = try AppRoutes.router()
+let router = routes.router()
 ```
 
 Use hash routing explicitly when you need static-hosting fallback:
@@ -89,33 +91,22 @@ Use hash routing explicitly when you need static-hosting fallback:
 @Routes(mode: .hash)
 struct DocsRoutes { ... }
 
-let router = try DocsRoutes.router()
+let app = Application(DocsRoutes.RouterView())
 ```
 
-Render the current route with the generated typed route view:
+The generated router view creates the concrete router and renders the current route:
 
 ```swift
-AppRoutes.Provider(router) {
-  AppRoutes.RouterView { routeContent in
-    div {
-      nav {
-        AppRoutes.Link(to: routes.handles.home) { "Home" }
-      }
-      main {
-        routeContent
-      }
-    }
-  }
-}
+let app = Application(AppRoutes.RouterView())
+app.mount(in: .body)
 ```
 
-`AppRoutes.RouterView` is the route boundary. It reads the typed router from
-`AppRoutes.Provider`, renders the current route, and passes that rendered route
-content into your visible app shell:
+Put visible app chrome in a route layout, so the app entry point only mounts routing:
 
 ```swift
-AppRoutes.RouterView { routeContent in
-  AppLayout(routeContent: routeContent)
+@Layout("/")
+static func contentView<Content: View>(outlet: Outlet<Content>) -> ContentView<Content> {
+  ContentView(outlet: outlet)
 }
 ```
 
@@ -152,7 +143,7 @@ The macro generates:
 - `AppRoutes.Handles`: named route handles
 - `AppRoutes.RouteSet`: the generated handles plus router-aware href helpers
 - `AppRoutes.Provider`: a typed router provider for this route declaration
-- `AppRoutes.RouterView`: a typed route boundary that renders the current route from the provider
+- `AppRoutes.RouterView`: a typed route boundary that creates the router and renders the current route
 - `AppRoutes.Link`: a typed link view for this route declaration
 - `AppRoutes.routes()`: the factory used to build the generated route set
 - `AppRoutes.router()`: the typed router factory for the declared routing mode

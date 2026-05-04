@@ -2,13 +2,15 @@ import ElementaryRouter
 import ElementaryUI
 
 @View
-struct AppLayout {
+struct ContentView<Content: View> {
+  @Environment(AppRoutes._routeSetEnvironmentKey) var routes
   @State var store = TodoStore()
 
-  let routes: AppRoutes.RouteSet
-  let routeContent: AppRoutes.RouteView
+  let outlet: Outlet<Content>
 
   var body: some View {
+    let routes = routeSet
+
     div(.style(pageStyle)) {
       header(.style(headerStyle)) {
         div {
@@ -28,10 +30,17 @@ struct AppLayout {
       }
 
       main(.style(mainStyle)) {
-        routeContent
+        outlet
       }
     }
     .environment(store)
     .environment(#Key(\.todoRouteSet), routes)
+  }
+
+  private var routeSet: AppRoutes.RouteSet {
+    guard let routes else {
+      preconditionFailure("ContentView requires AppRoutes.RouterView or AppRoutes.Provider.")
+    }
+    return routes
   }
 }

@@ -7,7 +7,7 @@
 /// - `RouteSet`: the compiled route tree plus route handles
 /// - `Handles`: strongly typed route handles for each declared route
 /// - `Provider`: a route-set-specific environment provider for generated links
-/// - `RouterView`: a route-set-specific view that renders the current route from `Provider`
+/// - `RouterView`: a route-set-specific view that creates a router and renders the current route
 /// - `Link`: a route-set-specific navigation view
 /// - `routes()`: builds the generated route set
 /// - `router()`: creates either `Router<RouteView>` or `HashRouter<RouteView>`
@@ -18,6 +18,7 @@
   names: named(RouteView),
   named(RouteSet),
   named(_routerEnvironmentKey),
+  named(_routeSetEnvironmentKey),
   named(Handles),
   named(Provider),
   named(RouterView),

@@ -3,6 +3,11 @@ import ElementaryUI
 
 @Routes
 struct AppRoutes {
+  @Layout("/")
+  static func contentView<Content: View>(outlet: Outlet<Content>) -> ContentView<Content> {
+    ContentView(outlet: outlet)
+  }
+
   @Route("/")
   static func allTasks() -> TodoListPage {
     TodoListPage(filter: .all)

@@ -86,42 +86,62 @@ final class RoutesMacroTests: XCTestCase {
               defaultValue: nil
             )
 
+          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
+              "ElementaryRouter.AppRoutes.routes",
+              defaultValue: nil
+            )
+
           @View
             struct Provider<Content: View> {
+              let routes: RouteSet
               let router: Router<RouteView>
               let content: Content
 
               init(_ router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
+                do throws(RouteTreeError) {
+                  let routes = try AppRoutes.routes()
+                  self.routes = routes
+                  self.router = router
+                  self.content = content()
+                } catch {
+                  preconditionFailure("AppRoutes.Provider could not build routes.")
+                }
+              }
+
+              init(_ router: Router<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+                self.routes = routes
                 self.router = router
                 self.content = content()
               }
 
               var body: some View {
                 content.environment(AppRoutes._routerEnvironmentKey, router)
+                  .environment(AppRoutes._routeSetEnvironmentKey, routes)
               }
             }
 
           @View
-            struct RouterView<Content: View> {
-              @Environment(AppRoutes._routerEnvironmentKey) var router
+            struct RouterView {
+              let routes: RouteSet
+              let router: Router<RouteView>
 
-              let content: (RouteView) -> Content
-
-              init(
-                @HTMLBuilder content: @escaping (RouteView) -> Content
-              ) {
-                self.content = content
+              init() {
+                do throws(RouteTreeError) {
+                  let routes = try AppRoutes.routes()
+                  self.routes = routes
+                  self.router = routes.router()
+                } catch {
+                  preconditionFailure("AppRoutes.RouterView could not build routes.")
+                }
               }
 
               var body: some View {
-                content(rendered)
+                Provider(router, routes: routes) {
+                  rendered
+                }
               }
 
               private var rendered: RouteView {
-                guard let router else {
-                  preconditionFailure("AppRoutes.RouterView requires AppRoutes.Provider.")
-                }
-
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
@@ -330,42 +350,62 @@ final class RoutesMacroTests: XCTestCase {
               defaultValue: nil
             )
 
+          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
+              "ElementaryRouter.AppRoutes.routes",
+              defaultValue: nil
+            )
+
           @View
             struct Provider<Content: View> {
+              let routes: RouteSet
               let router: Router<RouteView>
               let content: Content
 
               init(_ router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
+                do throws(RouteTreeError) {
+                  let routes = try AppRoutes.routes()
+                  self.routes = routes
+                  self.router = router
+                  self.content = content()
+                } catch {
+                  preconditionFailure("AppRoutes.Provider could not build routes.")
+                }
+              }
+
+              init(_ router: Router<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+                self.routes = routes
                 self.router = router
                 self.content = content()
               }
 
               var body: some View {
                 content.environment(AppRoutes._routerEnvironmentKey, router)
+                  .environment(AppRoutes._routeSetEnvironmentKey, routes)
               }
             }
 
           @View
-            struct RouterView<Content: View> {
-              @Environment(AppRoutes._routerEnvironmentKey) var router
+            struct RouterView {
+              let routes: RouteSet
+              let router: Router<RouteView>
 
-              let content: (RouteView) -> Content
-
-              init(
-                @HTMLBuilder content: @escaping (RouteView) -> Content
-              ) {
-                self.content = content
+              init() {
+                do throws(RouteTreeError) {
+                  let routes = try AppRoutes.routes()
+                  self.routes = routes
+                  self.router = routes.router()
+                } catch {
+                  preconditionFailure("AppRoutes.RouterView could not build routes.")
+                }
               }
 
               var body: some View {
-                content(rendered)
+                Provider(router, routes: routes) {
+                  rendered
+                }
               }
 
               private var rendered: RouteView {
-                guard let router else {
-                  preconditionFailure("AppRoutes.RouterView requires AppRoutes.Provider.")
-                }
-
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
@@ -564,42 +604,62 @@ final class RoutesMacroTests: XCTestCase {
               defaultValue: nil
             )
 
+          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
+              "ElementaryRouter.AppRoutes.routes",
+              defaultValue: nil
+            )
+
           @View
             struct Provider<Content: View> {
+              let routes: RouteSet
               let router: Router<RouteView>
               let content: Content
 
               init(_ router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
+                do throws(RouteTreeError) {
+                  let routes = try AppRoutes.routes()
+                  self.routes = routes
+                  self.router = router
+                  self.content = content()
+                } catch {
+                  preconditionFailure("AppRoutes.Provider could not build routes.")
+                }
+              }
+
+              init(_ router: Router<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+                self.routes = routes
                 self.router = router
                 self.content = content()
               }
 
               var body: some View {
                 content.environment(AppRoutes._routerEnvironmentKey, router)
+                  .environment(AppRoutes._routeSetEnvironmentKey, routes)
               }
             }
 
           @View
-            struct RouterView<Content: View> {
-              @Environment(AppRoutes._routerEnvironmentKey) var router
+            struct RouterView {
+              let routes: RouteSet
+              let router: Router<RouteView>
 
-              let content: (RouteView) -> Content
-
-              init(
-                @HTMLBuilder content: @escaping (RouteView) -> Content
-              ) {
-                self.content = content
+              init() {
+                do throws(RouteTreeError) {
+                  let routes = try AppRoutes.routes()
+                  self.routes = routes
+                  self.router = routes.router()
+                } catch {
+                  preconditionFailure("AppRoutes.RouterView could not build routes.")
+                }
               }
 
               var body: some View {
-                content(rendered)
+                Provider(router, routes: routes) {
+                  rendered
+                }
               }
 
               private var rendered: RouteView {
-                guard let router else {
-                  preconditionFailure("AppRoutes.RouterView requires AppRoutes.Provider.")
-                }
-
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
@@ -783,42 +843,62 @@ final class RoutesMacroTests: XCTestCase {
               defaultValue: nil
             )
 
+          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
+              "ElementaryRouter.DocsRoutes.routes",
+              defaultValue: nil
+            )
+
           @View
             struct Provider<Content: View> {
+              let routes: RouteSet
               let router: HashRouter<RouteView>
               let content: Content
 
               init(_ router: HashRouter<RouteView>, @HTMLBuilder content: () -> Content) {
+                do throws(RouteTreeError) {
+                  let routes = try DocsRoutes.routes()
+                  self.routes = routes
+                  self.router = router
+                  self.content = content()
+                } catch {
+                  preconditionFailure("DocsRoutes.Provider could not build routes.")
+                }
+              }
+
+              init(_ router: HashRouter<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+                self.routes = routes
                 self.router = router
                 self.content = content()
               }
 
               var body: some View {
                 content.environment(DocsRoutes._routerEnvironmentKey, router)
+                  .environment(DocsRoutes._routeSetEnvironmentKey, routes)
               }
             }
 
           @View
-            struct RouterView<Content: View> {
-              @Environment(DocsRoutes._routerEnvironmentKey) var router
+            struct RouterView {
+              let routes: RouteSet
+              let router: HashRouter<RouteView>
 
-              let content: (RouteView) -> Content
-
-              init(
-                @HTMLBuilder content: @escaping (RouteView) -> Content
-              ) {
-                self.content = content
+              init() {
+                do throws(RouteTreeError) {
+                  let routes = try DocsRoutes.routes()
+                  self.routes = routes
+                  self.router = routes.router()
+                } catch {
+                  preconditionFailure("DocsRoutes.RouterView could not build routes.")
+                }
               }
 
               var body: some View {
-                content(rendered)
+                Provider(router, routes: routes) {
+                  rendered
+                }
               }
 
               private var rendered: RouteView {
-                guard let router else {
-                  preconditionFailure("DocsRoutes.RouterView requires DocsRoutes.Provider.")
-                }
-
                 do {
                   return try router.renderCurrentRoute()
                 } catch {
