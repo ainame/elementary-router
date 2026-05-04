@@ -3,42 +3,40 @@ import ElementaryUI
 
 @View
 struct ContentView {
-  let routeSet: AppRoutes.RouteSet
+  let routes: AppRoutes.RouteSet
   let router: Router<AppRoutes.RouteView>
 
   var body: some View {
-    AppRoutes.Provider(router) {
-      div(.style(pageStyle)) {
-        header(.style(headerStyle)) {
-          h1(.style(titleStyle)) { "ElementaryUI Router" }
-          nav(.style(navStyle)) {
-            AppRoutes.Link(to: routeSet.handles.home) {
-              "Home"
-            }
-            AppRoutes.Link(
-              to: routeSet.handles.profile,
-              params: ["lang": "ja", "profileId": 42]
-            ) {
-              "Profile"
-            }
-            AppRoutes.Link(
-              to: routeSet.handles.docs,
-              params: ["*": "guide/get-started"],
-              hash: "install"
-            ) {
-              "Docs"
-            }
+    div(.style(pageStyle)) {
+      header(.style(headerStyle)) {
+        h1(.style(titleStyle)) { "ElementaryUI Router" }
+        nav(.style(navStyle)) {
+          AppRoutes.Link(to: routes.handles.home) {
+            "Home"
+          }
+          AppRoutes.Link(
+            to: routes.handles.profile,
+            params: ["lang": "ja", "profileId": 42]
+          ) {
+            "Profile"
+          }
+          AppRoutes.Link(
+            to: routes.handles.docs,
+            params: ["*": "guide/get-started"],
+            hash: "install"
+          ) {
+            "Docs"
           }
         }
+      }
 
-        main(.style(mainStyle)) {
-          RouterView(router) { _ in
-            AppRoutes.RouteView(
-              storage: .notFound(
-                RouteNotFoundContext(location: router.location, query: RouteValues())
-              )
+      main(.style(mainStyle)) {
+        RouterView(router) { _ in
+          AppRoutes.RouteView(
+            storage: .notFound(
+              RouteNotFoundContext(location: router.location, query: RouteValues())
             )
-          }
+          )
         }
       }
     }
