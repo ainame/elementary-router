@@ -4,7 +4,7 @@ import ElementaryUI
 @View
 struct ContentView<Content: View> {
   @Environment(AppRoutes._routeSetEnvironmentKey) var routes
-  @State var store = TodoStore()
+  @Environment(TodoStore.self) var store
 
   let outlet: Outlet<Content>
 
@@ -33,7 +33,6 @@ struct ContentView<Content: View> {
         outlet
       }
     }
-    .environment(store)
     .environment(#Key(\.todoRouteSet), routes)
   }
 
