@@ -102,19 +102,22 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
-            struct RouterView {
+            struct RouterView<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
               let renderError: (RouterRenderError, RouteLocation) -> RouteView
+              let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
+                @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
                 self.renderError = renderError
+                self.content = content
               }
 
               var body: some View {
-                rendered
+                content(rendered)
               }
 
               private var rendered: RouteView {
@@ -346,19 +349,22 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
-            struct RouterView {
+            struct RouterView<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
               let renderError: (RouterRenderError, RouteLocation) -> RouteView
+              let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
+                @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
                 self.renderError = renderError
+                self.content = content
               }
 
               var body: some View {
-                rendered
+                content(rendered)
               }
 
               private var rendered: RouteView {
@@ -580,19 +586,22 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
-            struct RouterView {
+            struct RouterView<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
               let renderError: (RouterRenderError, RouteLocation) -> RouteView
+              let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
+                @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
                 self.renderError = renderError
+                self.content = content
               }
 
               var body: some View {
-                rendered
+                content(rendered)
               }
 
               private var rendered: RouteView {
@@ -799,19 +808,22 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
-            struct RouterView {
+            struct RouterView<Content: View> {
               @Environment(DocsRoutes._routerEnvironmentKey) var router
 
               let renderError: (RouterRenderError, RouteLocation) -> RouteView
+              let content: (RouteView) -> Content
 
               init(
-                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
+                @HTMLBuilder content: @escaping (RouteView) -> Content
               ) {
                 self.renderError = renderError
+                self.content = content
               }
 
               var body: some View {
-                rendered
+                content(rendered)
               }
 
               private var rendered: RouteView {

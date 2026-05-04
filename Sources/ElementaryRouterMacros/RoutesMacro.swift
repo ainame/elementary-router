@@ -625,19 +625,22 @@ private func routerViewDeclaration(
 ) -> String {
   return """
       @View
-      \(access)struct RouterView {
+      \(access)struct RouterView<Content: View> {
         @Environment(\(containerName)._routerEnvironmentKey) var router
 
         let renderError: (RouterRenderError, RouteLocation) -> RouteView
+        let content: (RouteView) -> Content
 
         \(access)init(
-          onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+          onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView,
+          @HTMLBuilder content: @escaping (RouteView) -> Content
         ) {
           self.renderError = renderError
+          self.content = content
         }
 
         \(access)var body: some View {
-          rendered
+          content(rendered)
         }
 
         private var rendered: RouteView {

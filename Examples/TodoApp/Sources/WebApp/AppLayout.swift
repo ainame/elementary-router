@@ -2,16 +2,11 @@ import ElementaryRouter
 import ElementaryUI
 
 @View
-struct ContentView<RouteContent: View> {
+struct AppLayout {
   @State var store = TodoStore()
 
   let routes: AppRoutes.RouteSet
-  let routeContent: RouteContent
-
-  init(routes: AppRoutes.RouteSet, @HTMLBuilder routeContent: () -> RouteContent) {
-    self.routes = routes
-    self.routeContent = routeContent()
-  }
+  let routeContent: AppRoutes.RouteView
 
   var body: some View {
     div(.style(pageStyle)) {

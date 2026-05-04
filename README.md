@@ -96,19 +96,42 @@ Render the current route with the generated typed route view:
 
 ```swift
 AppRoutes.Provider(router) {
-  ContentView(routes: routes)
+  AppRoutes.RouterView(
+    onError: { _, location in
+      AppRoutes.RouteView(
+        storage: .notFound(
+          RouteNotFoundContext(location: location, query: RouteValues())
+        )
+      )
+    }
+  ) { routeContent in
+    div {
+      nav {
+        AppRoutes.Link(to: routes.handles.home) { "Home" }
+      }
+      main {
+        routeContent
+      }
+    }
+  }
 }
 ```
 
-Inside views below the provider, use the generated route-specific router view:
+`AppRoutes.RouterView` is the route boundary. It reads the typed router from
+`AppRoutes.Provider`, renders the current route, and passes that rendered route
+content into your visible app shell:
 
 ```swift
-AppRoutes.RouterView { _, location in
-  AppRoutes.RouteView(
-    storage: .notFound(
-      RouteNotFoundContext(location: location, query: RouteValues())
+AppRoutes.RouterView(
+  onError: { _, location in
+    AppRoutes.RouteView(
+      storage: .notFound(
+        RouteNotFoundContext(location: location, query: RouteValues())
+      )
     )
   )
+}) { routeContent in
+  AppLayout(routeContent: routeContent)
 }
 ```
 
@@ -145,7 +168,7 @@ The macro generates:
 - `AppRoutes.Handles`: named route handles
 - `AppRoutes.RouteSet`: the generated handles plus router-aware href helpers
 - `AppRoutes.Provider`: a typed router provider for this route declaration
-- `AppRoutes.RouterView`: a typed view that renders the current route from the provider
+- `AppRoutes.RouterView`: a typed route boundary that renders the current route from the provider
 - `AppRoutes.Link`: a typed link view for this route declaration
 - `AppRoutes.routes()`: the factory used to build the generated route set
 - `AppRoutes.router()`: the typed router factory for the declared routing mode
