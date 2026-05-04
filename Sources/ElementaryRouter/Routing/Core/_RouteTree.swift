@@ -1,6 +1,6 @@
 import ElementaryUI
 
-public struct RouteTree<RouteContent: View> {
+public struct _RouteTree<RouteContent: View> {
   struct Record {
     let handle: RouteHandle
     let parent: RouteHandle?
@@ -18,16 +18,16 @@ public struct RouteTree<RouteContent: View> {
   let notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   let errorRenderer: ((RouteErrorContext) -> RouteContent)?
 
-  public func match(_ location: RouteLocation) -> RouteMatch? {
-    matches(location).last
+  public func _match(_ location: RouteLocation) -> RouteMatch? {
+    _matches(location).last
   }
 
-  public func matches(_ location: RouteLocation) -> [RouteMatch] {
+  public func _matches(_ location: RouteLocation) -> [RouteMatch] {
     guard let leaf = findLeafRecord(for: location) else { return [] }
     return matchStack(for: leaf, location: location)
   }
 
-  public func href(
+  public func _href(
     to route: RouteHandle,
     params: RouteParameters = RouteParameters(),
     query: RouteParameters = RouteParameters(),
@@ -49,7 +49,7 @@ public struct RouteTree<RouteContent: View> {
     return href
   }
 
-  func resolve(_ location: RouteLocation) -> Resolution {
+  func _resolve(_ location: RouteLocation) -> Resolution {
     guard let record = findLeafRecord(for: location) else {
       return .notFound(
         RouteNotFoundContext(
@@ -85,7 +85,7 @@ public struct RouteTree<RouteContent: View> {
     return .matched(contexts[contexts.count - 1])
   }
 
-  func render(_ location: RouteLocation) throws(RouterRenderError) -> RouteContent {
+  func _render(_ location: RouteLocation) throws(RouterRenderError) -> RouteContent {
     guard let record = findLeafRecord(for: location) else {
       let context = RouteNotFoundContext(
         location: location,

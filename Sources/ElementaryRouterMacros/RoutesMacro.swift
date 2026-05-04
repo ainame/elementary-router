@@ -571,10 +571,10 @@ private func routeSetDeclaration(
 
   return """
       \(access)struct RouteSet {
-        let tree: RouteTree<RouteView>
+        let tree: _RouteTree<RouteView>
         \(access)let handles: Handles
 
-        init(tree: RouteTree<RouteView>, handles: Handles) {
+        init(tree: _RouteTree<RouteView>, handles: Handles) {
           self.tree = tree
           self.handles = handles
         }
@@ -906,7 +906,7 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
       \(access)func \(route.name)Href(\(signatureParameters)) throws(RouteMatchError) -> String {
         \(paramsBuilder)
         \(queryBuilder)
-        return try tree.href(to: handles.\(route.name), params: params, query: query, hash: hash)
+        return try tree._href(to: handles.\(route.name), params: params, query: query, hash: hash)
       }
     """
 }

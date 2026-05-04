@@ -136,9 +136,9 @@ struct MacroLayoutRoutes {
   let newUser = routes._route("/users/new") { EmptyHTML() }
   let tree = try routes._build()
 
-  #expect(tree.match(RouteLocation(url: "/users/new"))?.route == newUser)
+  #expect(tree._match(RouteLocation(url: "/users/new"))?.route == newUser)
 
-  let match = tree.match(RouteLocation(url: "/users/42"))
+  let match = tree._match(RouteLocation(url: "/users/42"))
   #expect(match?.route == user)
   #expect(match?.params.get("id") == "42")
 }
@@ -148,7 +148,7 @@ struct MacroLayoutRoutes {
   let files = routes._route("/files/*") { EmptyHTML() }
   let tree = try routes._build()
 
-  let match = tree.match(RouteLocation(url: "/files/docs/readme"))
+  let match = tree._match(RouteLocation(url: "/files/docs/readme"))
   #expect(match?.route == files)
   #expect(match?.params.get("*") == "docs/readme")
 }
@@ -160,7 +160,7 @@ struct MacroLayoutRoutes {
   let settings = routes._route("settings", parent: user) { EmptyHTML() }
   let tree = try routes._build()
 
-  let matches = tree.matches(RouteLocation(url: "/users/42/settings"))
+  let matches = tree._matches(RouteLocation(url: "/users/42/settings"))
 
   #expect(matches.map(\.route) == [users, user, settings])
   #expect(matches.map(\.path) == ["/users", "/users/:id", "/users/:id/settings"])
@@ -173,7 +173,7 @@ struct MacroLayoutRoutes {
   let profile = routes._route("/:lang/profile/:profileId") { EmptyHTML() }
   let tree = try routes._build()
 
-  let href = try tree.href(
+  let href = try tree._href(
     to: profile,
     params: ["lang": "ja", "profileId": 42],
     query: ["tab": "posts"]
@@ -189,7 +189,7 @@ struct MacroLayoutRoutes {
   let unknown = RouteHandle(id: .init(rawValue: 999))
 
   #expect(throws: RouteMatchError.unknownRoute) {
-    try tree.href(to: unknown)
+    try tree._href(to: unknown)
   }
 }
 
@@ -280,14 +280,14 @@ struct MacroLayoutRoutes {
   }
   let tree = try routes._build()
 
-  if case .notFound(let context) = tree.resolve(RouteLocation(url: "/missing?q=swift")) {
+  if case .notFound(let context) = tree._resolve(RouteLocation(url: "/missing?q=swift")) {
     #expect(context.location.path == "/missing")
     #expect(context.query.get("q") == "swift")
   } else {
     Issue.record("Expected notFound resolution")
   }
 
-  _ = try tree.render(RouteLocation(url: "/missing"))
+  _ = try tree._render(RouteLocation(url: "/missing"))
   #expect(notFoundPath == "/missing")
 }
 
@@ -311,7 +311,7 @@ struct MacroLayoutRoutes {
   let tree = try routes._build()
   let expected = RouteValueError.invalid(name: "profileId", rawValue: "abc", expected: "Int")
 
-  if case .error(let context) = tree.resolve(RouteLocation(url: "/profile/abc")) {
+  if case .error(let context) = tree._resolve(RouteLocation(url: "/profile/abc")) {
     #expect(context.error == expected)
     #expect(context.routeContext.match.params.get("profileId") == "abc")
     #expect(context.routeContext.matches.map(\.route) == [context.routeContext.match.route])
@@ -319,7 +319,7 @@ struct MacroLayoutRoutes {
     Issue.record("Expected error resolution")
   }
 
-  _ = try tree.render(RouteLocation(url: "/profile/abc"))
+  _ = try tree._render(RouteLocation(url: "/profile/abc"))
   #expect(renderedError == expected)
 }
 
@@ -332,7 +332,7 @@ struct MacroLayoutRoutes {
   }
   let tree = try routes._build()
 
-  _ = try tree.render(RouteLocation(url: "/docs/guide/get-started"))
+  _ = try tree._render(RouteLocation(url: "/docs/guide/get-started"))
 
   #expect(renderedPath == "guide/get-started")
 }
@@ -351,7 +351,7 @@ struct MacroLayoutRoutes {
   }
   let tree = try routes._build()
 
-  if case .matched(let context) = tree.resolve(RouteLocation(url: "/ja/profile/42")) {
+  if case .matched(let context) = tree._resolve(RouteLocation(url: "/ja/profile/42")) {
     #expect(context.match.route == profile)
     #expect(context.params.get("lang") == "ja")
     #expect(context.params.get("profileId") == "42")
@@ -375,7 +375,7 @@ struct MacroLayoutRoutes {
   }
   let tree = try routes._build()
 
-  if case .error(let context) = tree.resolve(RouteLocation(url: "/accounts/abc/settings")) {
+  if case .error(let context) = tree._resolve(RouteLocation(url: "/accounts/abc/settings")) {
     #expect(context.error == .invalid(name: "accountId", rawValue: "abc", expected: "Int"))
     #expect(context.routeContext.match.route == account)
     #expect(context.routeContext.params.get("accountId") == "abc")

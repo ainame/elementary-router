@@ -47,7 +47,7 @@ public final class Router<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, BrowserHistory>
 
-  public init(routes: RouteTree<RouteContent>) {
+  public init(routes: _RouteTree<RouteContent>) {
     self.storage = HistoryRouter(routes: routes, history: BrowserHistory())
   }
 
@@ -120,7 +120,7 @@ public final class HashRouter<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, HashHistory>
 
-  public init(routes: RouteTree<RouteContent>) {
+  public init(routes: _RouteTree<RouteContent>) {
     self.storage = HistoryRouter(routes: routes, history: HashHistory())
   }
 
@@ -192,14 +192,14 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
   private let state: RouterState
-  private let routes: RouteTree<RouteContent>
+  private let routes: _RouteTree<RouteContent>
   private let history: History
   private var subscription: HistorySubscription?
 
-  init(routes: RouteTree<RouteContent>, history: History) {
+  init(routes: _RouteTree<RouteContent>, history: History) {
     self.routes = routes
     self.history = history
-    self.state = RouterState(location: history.location, matches: routes.matches(history.location))
+    self.state = RouterState(location: history.location, matches: routes._matches(history.location))
 
     self.subscription = history.listen { update in
       self.apply(update.location)
@@ -228,7 +228,7 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     query: RouteParameters = RouteParameters(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
-    try routes.href(to: route, params: params, query: query, hash: hash)
+    try routes._href(to: route, params: params, query: query, hash: hash)
   }
 
   func navigate(
@@ -238,7 +238,7 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     hash: String = "",
     replace: Bool = false
   ) throws(RouteMatchError) {
-    let href = try routes.href(to: route, params: params, query: query, hash: hash)
+    let href = try routes._href(to: route, params: params, query: query, hash: hash)
     navigate(to: RouteLocation(url: href), replace: replace)
   }
 
@@ -302,16 +302,16 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     return true
   }
 
-  func resolveCurrentRoute() -> RouteTree<RouteContent>.Resolution {
-    routes.resolve(location)
+  func resolveCurrentRoute() -> _RouteTree<RouteContent>.Resolution {
+    routes._resolve(location)
   }
 
   func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
-    try routes.render(location)
+    try routes._render(location)
   }
 
   private func apply(_ location: RouteLocation) {
-    state.apply(location: location, matches: routes.matches(location))
+    state.apply(location: location, matches: routes._matches(location))
   }
 }
 

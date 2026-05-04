@@ -59,10 +59,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
+              let tree: _RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
+              init(tree: _RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -77,7 +77,7 @@ final class RoutesMacroTests: XCTestCase {
                 if let tab {
                 query = query.set("tab", tab)
               }
-              return try tree.href(to: handles.user, params: params, query: query, hash: hash)
+              return try tree._href(to: handles.user, params: params, query: query, hash: hash)
             }
             }
 
@@ -277,10 +277,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
+              let tree: _RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
+              init(tree: _RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -292,7 +292,7 @@ final class RoutesMacroTests: XCTestCase {
               func validHref(hash: String = "") throws(RouteMatchError) -> String {
               let params = RouteParameters()
               let query = RouteParameters()
-              return try tree.href(to: handles.valid, params: params, query: query, hash: hash)
+              return try tree._href(to: handles.valid, params: params, query: query, hash: hash)
             }
             }
 
@@ -482,10 +482,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
+              let tree: _RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
+              init(tree: _RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -497,7 +497,7 @@ final class RoutesMacroTests: XCTestCase {
               func userHref(hash: String = "") throws(RouteMatchError) -> String {
               let params = RouteParameters()
               let query = RouteParameters()
-              return try tree.href(to: handles.user, params: params, query: query, hash: hash)
+              return try tree._href(to: handles.user, params: params, query: query, hash: hash)
             }
             }
 
@@ -672,10 +672,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: RouteTree<RouteView>
+              let tree: _RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: RouteTree<RouteView>, handles: Handles) {
+              init(tree: _RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -687,7 +687,7 @@ final class RoutesMacroTests: XCTestCase {
               func docsHref(splat: String, hash: String = "") throws(RouteMatchError) -> String {
               let params: RouteParameters = ["*": RouteValueLiteral(splat)]
               let query = RouteParameters()
-              return try tree.href(to: handles.docs, params: params, query: query, hash: hash)
+              return try tree._href(to: handles.docs, params: params, query: query, hash: hash)
             }
             }
 

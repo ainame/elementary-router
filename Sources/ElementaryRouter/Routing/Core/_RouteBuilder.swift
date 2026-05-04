@@ -58,8 +58,8 @@ public final class _RouteBuilder<RouteContent: View> {
     errorRenderer = render
   }
 
-  public func _build() throws(RouteTreeError) -> RouteTree<RouteContent> {
-    var compiled: [RouteTree<RouteContent>.Record] = []
+  public func _build() throws(RouteTreeError) -> _RouteTree<RouteContent> {
+    var compiled: [_RouteTree<RouteContent>.Record] = []
     var seenPaths: [String] = []
     let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })
 
@@ -70,7 +70,7 @@ public final class _RouteBuilder<RouteContent: View> {
       }
       seenPaths.append(pattern.path)
       compiled.append(
-        RouteTree.Record(
+        _RouteTree.Record(
           handle: record.handle,
           parent: record.parent,
           pattern: pattern,
@@ -87,7 +87,7 @@ public final class _RouteBuilder<RouteContent: View> {
       }
     }
 
-    return RouteTree(
+    return _RouteTree(
       records: compiled,
       notFoundRenderer: notFoundRenderer,
       errorRenderer: errorRenderer
