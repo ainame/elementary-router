@@ -99,7 +99,7 @@ AppRoutes.Provider(router) {
   RouterView(router) { _ in
     AppRoutes.RouteView(
       storage: .notFound(
-        RouteNotFoundContext(location: router.location, query: RouteParameters())
+        RouteNotFoundContext(location: router.location, query: RouteValues())
       )
     )
   }
@@ -243,7 +243,7 @@ an invalid `Int` path parameter.
 - `HashRouter` is available when you explicitly want hash-based routing.
 - `@Layout` composes nested route UI through `Outlet<Content>`.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
-- `RouteParameters` is used for both path params and query params.
+- `RouteValues` is used for both path params and query params.
 - `Query<T>` maps query values into typed route function parameters.
 - `Wildcard` maps `*` routes into a typed route function parameter.
 

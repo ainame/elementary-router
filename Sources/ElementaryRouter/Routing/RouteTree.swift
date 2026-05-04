@@ -34,8 +34,8 @@ public struct RouteTree<RouteContent: View> {
 
   public func _href(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
     guard let record = records.first(where: { $0.handle == route }) else {

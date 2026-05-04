@@ -35,7 +35,7 @@ struct ContentView {
           RouterView(router) { _ in
             AppRoutes.RouteView(
               storage: .notFound(
-                RouteNotFoundContext(location: router.location, query: RouteParameters())
+                RouteNotFoundContext(location: router.location, query: RouteValues())
               )
             )
           }

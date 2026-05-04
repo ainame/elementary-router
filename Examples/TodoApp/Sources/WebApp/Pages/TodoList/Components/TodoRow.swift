@@ -20,7 +20,7 @@ struct TodoRow {
       div(.style(rowContentStyle)) {
         AppRoutes.Link(
           to: detailRoute,
-          params: ["todoID": RouteParameters.ValueLiteral(todo.id)]
+          params: ["todoID": RouteValues.ValueLiteral(todo.id)]
         ) {
           todo.title
         }

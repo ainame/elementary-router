@@ -85,7 +85,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeParametersExtractsStringsAndTypedValues() throws {
-  let values: RouteParameters = ["lang": "ja", "profileId": 42]
+  let values: RouteValues = ["lang": "ja", "profileId": 42]
 
   #expect(try values.require("lang") == "ja")
   #expect(try values.require("profileId", Int.self) == 42)
@@ -94,7 +94,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeParametersSupportsInitializerLists() throws {
-  let values = RouteParameters(("lang", "ja"), ("profileId", 42), ("enabled", true))
+  let values = RouteValues(("lang", "ja"), ("profileId", 42), ("enabled", true))
 
   #expect(try values.require("lang") == "ja")
   #expect(try values.require("profileId", Int.self) == 42)
@@ -102,7 +102,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeParametersReportsMissingAndInvalidValues() {
-  let values: RouteParameters = ["profileId": "abc"]
+  let values: RouteValues = ["profileId": "abc"]
 
   #expect(throws: RouteValueError.missing(name: "lang")) {
     try values.require("lang")
@@ -122,7 +122,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func queryStringStringifiesValuesInInsertionOrder() {
-  let values = RouteParameters()
+  let values = RouteValues()
     .append("tag", "swift")
     .append("tag", "wasm")
     .set("q", "hello world")

@@ -72,8 +72,8 @@ final class RoutesMacroTests: XCTestCase {
               }
 
               func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
-              let params: RouteParameters = ["id": RouteParameters.ValueLiteral(id)]
-                var query = RouteParameters()
+              let params: RouteValues = ["id": RouteValues.ValueLiteral(id)]
+                var query = RouteValues()
                 if let tab {
                 query = query.set("tab", tab)
               }
@@ -106,8 +106,8 @@ final class RoutesMacroTests: XCTestCase {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
               let route: RouteHandle
-              let params: RouteParameters
-              let query: RouteParameters
+              let params: RouteValues
+              let query: RouteValues
               let hash: String
               let replace: Bool
               let target: HTMLAttributeValue.Target?
@@ -115,8 +115,8 @@ final class RoutesMacroTests: XCTestCase {
 
               init(
                 to route: RouteHandle,
-                params: RouteParameters = RouteParameters(),
-                query: RouteParameters = RouteParameters(),
+                params: RouteValues = RouteValues(),
+                query: RouteValues = RouteValues(),
                 hash: String = "",
                 replace: Bool = false,
                 target: HTMLAttributeValue.Target? = nil,
@@ -290,8 +290,8 @@ final class RoutesMacroTests: XCTestCase {
               }
 
               func validHref(hash: String = "") throws(RouteMatchError) -> String {
-              let params = RouteParameters()
-              let query = RouteParameters()
+              let params = RouteValues()
+              let query = RouteValues()
               return try tree._href(to: handles.valid, params: params, query: query, hash: hash)
             }
             }
@@ -321,8 +321,8 @@ final class RoutesMacroTests: XCTestCase {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
               let route: RouteHandle
-              let params: RouteParameters
-              let query: RouteParameters
+              let params: RouteValues
+              let query: RouteValues
               let hash: String
               let replace: Bool
               let target: HTMLAttributeValue.Target?
@@ -330,8 +330,8 @@ final class RoutesMacroTests: XCTestCase {
 
               init(
                 to route: RouteHandle,
-                params: RouteParameters = RouteParameters(),
-                query: RouteParameters = RouteParameters(),
+                params: RouteValues = RouteValues(),
+                query: RouteValues = RouteValues(),
                 hash: String = "",
                 replace: Bool = false,
                 target: HTMLAttributeValue.Target? = nil,
@@ -495,8 +495,8 @@ final class RoutesMacroTests: XCTestCase {
               }
 
               func userHref(hash: String = "") throws(RouteMatchError) -> String {
-              let params = RouteParameters()
-              let query = RouteParameters()
+              let params = RouteValues()
+              let query = RouteValues()
               return try tree._href(to: handles.user, params: params, query: query, hash: hash)
             }
             }
@@ -526,8 +526,8 @@ final class RoutesMacroTests: XCTestCase {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
               let route: RouteHandle
-              let params: RouteParameters
-              let query: RouteParameters
+              let params: RouteValues
+              let query: RouteValues
               let hash: String
               let replace: Bool
               let target: HTMLAttributeValue.Target?
@@ -535,8 +535,8 @@ final class RoutesMacroTests: XCTestCase {
 
               init(
                 to route: RouteHandle,
-                params: RouteParameters = RouteParameters(),
-                query: RouteParameters = RouteParameters(),
+                params: RouteValues = RouteValues(),
+                query: RouteValues = RouteValues(),
                 hash: String = "",
                 replace: Bool = false,
                 target: HTMLAttributeValue.Target? = nil,
@@ -685,8 +685,8 @@ final class RoutesMacroTests: XCTestCase {
               }
 
               func docsHref(splat: String, hash: String = "") throws(RouteMatchError) -> String {
-              let params: RouteParameters = ["*": RouteParameters.ValueLiteral(splat)]
-              let query = RouteParameters()
+              let params: RouteValues = ["*": RouteValues.ValueLiteral(splat)]
+              let query = RouteValues()
               return try tree._href(to: handles.docs, params: params, query: query, hash: hash)
             }
             }
@@ -716,8 +716,8 @@ final class RoutesMacroTests: XCTestCase {
               @Environment(DocsRoutes._routerEnvironmentKey) var router
 
               let route: RouteHandle
-              let params: RouteParameters
-              let query: RouteParameters
+              let params: RouteValues
+              let query: RouteValues
               let hash: String
               let replace: Bool
               let target: HTMLAttributeValue.Target?
@@ -725,8 +725,8 @@ final class RoutesMacroTests: XCTestCase {
 
               init(
                 to route: RouteHandle,
-                params: RouteParameters = RouteParameters(),
-                query: RouteParameters = RouteParameters(),
+                params: RouteValues = RouteValues(),
+                query: RouteValues = RouteValues(),
                 hash: String = "",
                 replace: Bool = false,
                 target: HTMLAttributeValue.Target? = nil,

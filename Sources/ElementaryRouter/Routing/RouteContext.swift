@@ -6,39 +6,17 @@ public struct RouteHandle: Hashable, Equatable, Sendable, Identifiable {
   public let id: ID
 }
 
-public struct Query<Value: RouteValue & Equatable>: Equatable, Sendable {
-  public let value: Value
-
-  public init(_ value: Value) {
-    self.value = value
-  }
-}
-
-extension Query where Value == String {
-  public init(stringLiteral value: String) {
-    self.value = value
-  }
-}
-
-public struct Wildcard: Equatable, Sendable {
-  public let value: String
-
-  public init(_ value: String) {
-    self.value = value
-  }
-}
-
 struct RouteMatch: Equatable, Sendable {
   let route: RouteHandle
   let path: String
-  let params: RouteParameters
+  let params: RouteValues
 }
 
 public struct RouteContext: Sendable {
   public let route: RouteHandle
   public let path: String
-  public let params: RouteParameters
-  public let query: RouteParameters
+  public let params: RouteValues
+  public let query: RouteValues
   public let location: RouteLocation
   public let matchedRoutes: [RouteHandle]
 }

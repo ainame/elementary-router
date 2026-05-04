@@ -20,14 +20,14 @@ final class RouterState {
 public final class Router<RouteContent: View> {
   public struct ActiveMatchOptions: Equatable, Sendable {
     public var includeDescendants: Bool
-    public var params: RouteParameters?
-    public var query: RouteParameters?
+    public var params: RouteValues?
+    public var query: RouteValues?
     public var hash: String?
 
     public init(
       includeDescendants: Bool = false,
-      params: RouteParameters? = nil,
-      query: RouteParameters? = nil,
+      params: RouteValues? = nil,
+      query: RouteValues? = nil,
       hash: String? = nil
     ) {
       self.includeDescendants = includeDescendants
@@ -63,14 +63,14 @@ public final class Router<RouteContent: View> {
     storage.currentMatch?.route
   }
 
-  public var currentParams: RouteParameters? {
+  public var currentParams: RouteValues? {
     storage.currentMatch?.params
   }
 
   public func href(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
     try storage.href(to: route, params: params, query: query, hash: hash)
@@ -78,8 +78,8 @@ public final class Router<RouteContent: View> {
 
   public func navigate(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = "",
     replace: Bool = false
   ) throws(RouteMatchError) {
@@ -92,8 +92,8 @@ public final class Router<RouteContent: View> {
 
   public func replace(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) {
     try storage.replace(to: route, params: params, query: query, hash: hash)
@@ -140,14 +140,14 @@ public final class HashRouter<RouteContent: View> {
     storage.currentMatch?.route
   }
 
-  public var currentParams: RouteParameters? {
+  public var currentParams: RouteValues? {
     storage.currentMatch?.params
   }
 
   public func href(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
     try storage.href(to: route, params: params, query: query, hash: hash)
@@ -155,8 +155,8 @@ public final class HashRouter<RouteContent: View> {
 
   public func navigate(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = "",
     replace: Bool = false
   ) throws(RouteMatchError) {
@@ -169,8 +169,8 @@ public final class HashRouter<RouteContent: View> {
 
   public func replace(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) {
     try storage.replace(to: route, params: params, query: query, hash: hash)
@@ -238,14 +238,14 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     currentMatch?.route
   }
 
-  var currentParams: RouteParameters? {
+  var currentParams: RouteValues? {
     currentMatch?.params
   }
 
   func href(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
     try routes._href(to: route, params: params, query: query, hash: hash)
@@ -253,8 +253,8 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
 
   func navigate(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = "",
     replace: Bool = false
   ) throws(RouteMatchError) {
@@ -273,8 +273,8 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
 
   func replace(
     to route: RouteHandle,
-    params: RouteParameters = RouteParameters(),
-    query: RouteParameters = RouteParameters(),
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) {
     try navigate(to: route, params: params, query: query, hash: hash, replace: true)

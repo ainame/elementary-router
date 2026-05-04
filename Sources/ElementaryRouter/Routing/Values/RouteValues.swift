@@ -1,4 +1,4 @@
-public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiteral {
+public struct RouteValues: Equatable, Sendable, ExpressibleByDictionaryLiteral {
   public struct ValueLiteral: Equatable, Sendable {
     public let rawValue: String
 
@@ -63,14 +63,14 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
     return value
   }
 
-  public func set(_ name: String, _ value: some RouteValue) -> RouteParameters {
+  public func set(_ name: String, _ value: some RouteValue) -> RouteValues {
     var copy = self
     copy.storage[name] = [value.routeValueString]
     copy.rebuildOrderReplacing(name, with: [value.routeValueString])
     return copy
   }
 
-  public func append(_ name: String, _ value: some RouteValue) -> RouteParameters {
+  public func append(_ name: String, _ value: some RouteValue) -> RouteValues {
     var copy = self
     copy.append(name, value.routeValueString)
     return copy
@@ -80,7 +80,7 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
     order
   }
 
-  public func containsAll(_ expected: RouteParameters) -> Bool {
+  public func containsAll(_ expected: RouteValues) -> Bool {
     for pair in expected.pairs {
       if !all(pair.0).contains(pair.1) {
         return false
@@ -101,7 +101,7 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
     }
   }
 
-  public static func == (lhs: RouteParameters, rhs: RouteParameters) -> Bool {
+  public static func == (lhs: RouteValues, rhs: RouteValues) -> Bool {
     guard lhs.order.count == rhs.order.count else { return false }
     for index in lhs.order.indices {
       guard lhs.order[index].0 == rhs.order[index].0,
@@ -114,25 +114,25 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
   }
 }
 
-extension RouteParameters.ValueLiteral: ExpressibleByStringLiteral {
+extension RouteValues.ValueLiteral: ExpressibleByStringLiteral {
   public init(stringLiteral value: String) {
     self.rawValue = value
   }
 }
 
-extension RouteParameters.ValueLiteral: ExpressibleByIntegerLiteral {
+extension RouteValues.ValueLiteral: ExpressibleByIntegerLiteral {
   public init(integerLiteral value: Int) {
     self.rawValue = value.routeValueString
   }
 }
 
-extension RouteParameters.ValueLiteral: ExpressibleByFloatLiteral {
+extension RouteValues.ValueLiteral: ExpressibleByFloatLiteral {
   public init(floatLiteral value: Double) {
     self.rawValue = value.routeValueString
   }
 }
 
-extension RouteParameters.ValueLiteral: ExpressibleByBooleanLiteral {
+extension RouteValues.ValueLiteral: ExpressibleByBooleanLiteral {
   public init(booleanLiteral value: Bool) {
     self.rawValue = value.routeValueString
   }

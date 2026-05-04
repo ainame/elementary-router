@@ -623,8 +623,8 @@ private func linkDeclaration(
         @Environment(\(containerName)._routerEnvironmentKey) var router
 
         let route: RouteHandle
-        let params: RouteParameters
-        let query: RouteParameters
+        let params: RouteValues
+        let query: RouteValues
         let hash: String
         let replace: Bool
         let target: HTMLAttributeValue.Target?
@@ -632,8 +632,8 @@ private func linkDeclaration(
 
         \(access)init(
           to route: RouteHandle,
-          params: RouteParameters = RouteParameters(),
-          query: RouteParameters = RouteParameters(),
+          params: RouteValues = RouteValues(),
+          query: RouteValues = RouteValues(),
           hash: String = "",
           replace: Bool = false,
           target: HTMLAttributeValue.Target? = nil,
@@ -869,19 +869,19 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
 
   let pathPairs = pathParameters.map { parameter in
     let key = parameter.kind == .wildcard ? "*" : parameter.label
-    return "\"\(key)\": RouteParameters.ValueLiteral(\(parameter.label))"
+    return "\"\(key)\": RouteValues.ValueLiteral(\(parameter.label))"
   }.joined(separator: ", ")
 
   let paramsBuilder: String
   if pathPairs.isEmpty {
-    paramsBuilder = "let params = RouteParameters()"
+    paramsBuilder = "let params = RouteValues()"
   } else {
-    paramsBuilder = "let params: RouteParameters = [\(pathPairs)]"
+    paramsBuilder = "let params: RouteValues = [\(pathPairs)]"
   }
 
   let queryBuilder: String
   if queryParameters.isEmpty {
-    queryBuilder = "let query = RouteParameters()"
+    queryBuilder = "let query = RouteValues()"
   } else {
     let lines = queryParameters.map { parameter in
       if parameter.queryDefaultValue != nil {
@@ -897,7 +897,7 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
     }.joined(separator: "\n")
 
     queryBuilder = """
-        var query = RouteParameters()
+        var query = RouteValues()
         \(lines)
       """
   }
