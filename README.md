@@ -237,8 +237,8 @@ an invalid `Int` path parameter.
 
 ## Routing Model
 
-- `Router.matches` is the parent-to-leaf match stack.
-- `Router.currentMatch` is a leaf convenience.
+- `Router.matchedRoutes` is the parent-to-leaf match stack.
+- `Router.currentRoute` and `Router.currentParams` are leaf conveniences.
 - `Router` uses standard browser path routing.
 - `HashRouter` is available when you explicitly want hash-based routing.
 - `@Layout` composes nested route UI through `Outlet<Content>`.

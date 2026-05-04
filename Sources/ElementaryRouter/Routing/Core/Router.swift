@@ -3,8 +3,8 @@ import Reactivity
 
 @Reactive
 final class RouterState {
-  public private(set) var location: RouteLocation
-  public private(set) var matches: [RouteMatch]
+  var location: RouteLocation
+  var matches: [RouteMatch]
 
   init(location: RouteLocation, matches: [RouteMatch]) {
     self.location = location
@@ -55,12 +55,16 @@ public final class Router<RouteContent: View> {
     storage.location
   }
 
-  public var matches: [RouteMatch] {
-    storage.matches
+  public var matchedRoutes: [RouteHandle] {
+    storage.matches.map(\.route)
   }
 
-  public var currentMatch: RouteMatch? {
-    storage.currentMatch
+  public var currentRoute: RouteHandle? {
+    storage.currentMatch?.route
+  }
+
+  public var currentParams: RouteParameters? {
+    storage.currentMatch?.params
   }
 
   public func href(
@@ -128,12 +132,16 @@ public final class HashRouter<RouteContent: View> {
     storage.location
   }
 
-  public var matches: [RouteMatch] {
-    storage.matches
+  public var matchedRoutes: [RouteHandle] {
+    storage.matches.map(\.route)
   }
 
-  public var currentMatch: RouteMatch? {
-    storage.currentMatch
+  public var currentRoute: RouteHandle? {
+    storage.currentMatch?.route
+  }
+
+  public var currentParams: RouteParameters? {
+    storage.currentMatch?.params
   }
 
   public func href(
@@ -220,6 +228,18 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
 
   var currentMatch: RouteMatch? {
     matches.last
+  }
+
+  var matchedRoutes: [RouteHandle] {
+    matches.map(\.route)
+  }
+
+  var currentRoute: RouteHandle? {
+    currentMatch?.route
+  }
+
+  var currentParams: RouteParameters? {
+    currentMatch?.params
   }
 
   func href(

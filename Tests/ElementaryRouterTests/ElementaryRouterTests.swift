@@ -60,8 +60,8 @@ struct MacroLayoutRoutes {
   let routeSet = try MacroRoutes.routes()
   let router = MemoryRouter(routes: routeSet.tree, history: MemoryHistory(initialPath: "/users/42"))
 
-  #expect(router.currentMatch?.route == routeSet.handles.user)
-  #expect(router.currentMatch?.params.get("id") == "42")
+  #expect(router.currentRoute == routeSet.handles.user)
+  #expect(router.currentParams?.get("id") == "42")
   #expect(try routeSet.userHref(id: 42) == "/users/42")
   #expect(try routeSet.userHref(id: 42, tab: "posts") == "/users/42?tab=posts")
   #expect(
@@ -76,9 +76,9 @@ struct MacroLayoutRoutes {
     history: MemoryHistory(initialPath: "/teams/7/members/42")
   )
 
-  #expect(router.matches.map(\.route) == [routeSet.handles.teamLayout, routeSet.handles.member])
-  #expect(router.currentMatch?.params.get("teamID") == "7")
-  #expect(router.currentMatch?.params.get("memberID") == "42")
+  #expect(router.matchedRoutes == [routeSet.handles.teamLayout, routeSet.handles.member])
+  #expect(router.currentParams?.get("teamID") == "7")
+  #expect(router.currentParams?.get("memberID") == "42")
   #expect(try routeSet.memberHref(teamID: 7, memberID: 42) == "/teams/7/members/42")
 
   _ = try router.renderCurrentRoute()
@@ -217,7 +217,7 @@ struct MacroLayoutRoutes {
   let history = MemoryHistory(initialPath: "/")
   let router = MemoryRouter(routes: tree, history: history)
 
-  #expect(router.currentMatch?.route == home)
+  #expect(router.currentRoute == home)
 
   try router.navigate(
     to: profile,
@@ -226,9 +226,9 @@ struct MacroLayoutRoutes {
   )
 
   #expect(router.location.href == "/ja/profile/42?tab=posts")
-  #expect(router.currentMatch?.route == profile)
-  #expect(router.matches.map(\.route) == [profile])
-  #expect(router.currentMatch?.params.get("lang") == "ja")
+  #expect(router.currentRoute == profile)
+  #expect(router.matchedRoutes == [profile])
+  #expect(router.currentParams?.get("lang") == "ja")
   #expect(router.location.queryString == "tab=posts")
 }
 
@@ -239,8 +239,8 @@ struct MacroLayoutRoutes {
   let tree = try routes._build()
   let router = MemoryRouter(routes: tree, history: MemoryHistory(initialPath: "/users/42"))
 
-  #expect(router.matches.map(\.route) == [users, user])
-  #expect(router.currentMatch?.params.get("id") == "42")
+  #expect(router.matchedRoutes == [users, user])
+  #expect(router.currentParams?.get("id") == "42")
 }
 
 @Test func routerSupportsActiveMatchingOptions() throws {
@@ -313,8 +313,8 @@ struct MacroLayoutRoutes {
 
   if case .error(let context) = tree._resolve(RouteLocation(url: "/profile/abc")) {
     #expect(context.error == expected)
-    #expect(context.routeContext.match.params.get("profileId") == "abc")
-    #expect(context.routeContext.matches.map(\.route) == [context.routeContext.match.route])
+    #expect(context.routeContext.params.get("profileId") == "abc")
+    #expect(context.routeContext.matchedRoutes == [context.routeContext.route])
   } else {
     Issue.record("Expected error resolution")
   }
@@ -352,7 +352,7 @@ struct MacroLayoutRoutes {
   let tree = try routes._build()
 
   if case .matched(let context) = tree._resolve(RouteLocation(url: "/ja/profile/42")) {
-    #expect(context.match.route == profile)
+    #expect(context.route == profile)
     #expect(context.params.get("lang") == "ja")
     #expect(context.params.get("profileId") == "42")
   } else {
@@ -377,7 +377,7 @@ struct MacroLayoutRoutes {
 
   if case .error(let context) = tree._resolve(RouteLocation(url: "/accounts/abc/settings")) {
     #expect(context.error == .invalid(name: "accountId", rawValue: "abc", expected: "Int"))
-    #expect(context.routeContext.match.route == account)
+    #expect(context.routeContext.route == account)
     #expect(context.routeContext.params.get("accountId") == "abc")
   } else {
     Issue.record("Expected parent route error")

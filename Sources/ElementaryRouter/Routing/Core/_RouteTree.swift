@@ -18,11 +18,11 @@ public struct _RouteTree<RouteContent: View> {
   let notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   let errorRenderer: ((RouteErrorContext) -> RouteContent)?
 
-  public func _match(_ location: RouteLocation) -> RouteMatch? {
+  func _match(_ location: RouteLocation) -> RouteMatch? {
     _matches(location).last
   }
 
-  public func _matches(_ location: RouteLocation) -> [RouteMatch] {
+  func _matches(_ location: RouteLocation) -> [RouteMatch] {
     guard let leaf = findLeafRecord(for: location) else { return [] }
     return matchStack(for: leaf, location: location)
   }
@@ -73,7 +73,7 @@ public struct _RouteTree<RouteContent: View> {
     let recordsByID = recordsByRouteID()
 
     for context in contexts {
-      guard let record = recordsByID[context.match.route.id] else { continue }
+      guard let record = recordsByID[context.route.id] else { continue }
 
       do throws(RouteValueError) {
         _ = try record.render(context)
@@ -114,7 +114,7 @@ public struct _RouteTree<RouteContent: View> {
     var rendered: RouteContent?
 
     for context in contexts {
-      guard let record = recordsByID[context.match.route.id] else { continue }
+      guard let record = recordsByID[context.route.id] else { continue }
 
       do throws(RouteValueError) {
         rendered = try record.render(context)
@@ -185,15 +185,17 @@ public struct _RouteTree<RouteContent: View> {
     contexts.reserveCapacity(matches.count)
 
     let query = QueryString.parse(location.queryString)
+    let matchedRoutes = matches.map(\.route)
 
     for match in matches {
       contexts.append(
         RouteContext(
+          route: match.route,
+          path: match.path,
           params: match.params,
           query: query,
           location: location,
-          match: match,
-          matches: matches
+          matchedRoutes: matchedRoutes
         )
       )
     }
