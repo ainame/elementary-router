@@ -4,9 +4,13 @@ import ElementaryUI
 @main
 struct App {
   static func main() throws(RouteTreeError) {
-    let routeSet = try AppRoutes.routes()
+    let routes = try AppRoutes.routes()
     let router = try AppRoutes.router()
-    let app = Application(ContentView(routeSet: routeSet, router: router))
+    let app = Application(
+      AppRoutes.Provider(router) {
+        ContentView(routes: routes, router: router)
+      }
+    )
     app.mount(in: .body)
   }
 }
