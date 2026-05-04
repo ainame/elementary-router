@@ -726,7 +726,7 @@ private func routesFunctionDeclaration(
 
   let notFoundRegistration = notFound.map { function in
     """
-        collection.notFound { context in
+        collection._notFound { context in
           RouteView(storage: .notFound(context))
         }
     """
@@ -734,7 +734,7 @@ private func routesFunctionDeclaration(
 
   let errorRegistration = routeError.map { function in
     """
-        collection.error { context in
+        collection._error { context in
           RouteView(storage: .routeError(context))
         }
     """
@@ -743,12 +743,12 @@ private func routesFunctionDeclaration(
   let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
-        let collection = RouteCollection<RouteView>()
+        let collection = _RouteBuilder<RouteView>()
         \(layoutRegistrations.joined(separator: "\n"))
         \(registrations.joined(separator: "\n"))
         \([notFoundRegistration, errorRegistration].compactMap { $0 }.joined(separator: "\n"))
         return RouteSet(
-          tree: try collection.freeze(),
+          tree: try collection._build(),
           handles: Handles(\(handles))
         )
       }
@@ -832,14 +832,14 @@ private func routeRegistration(_ route: RouteDeclaration, parent: RouteDeclarati
 
   if route.storageParameters.isEmpty {
     return """
-          let \(route.name) = collection.route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) {
+          let \(route.name) = collection._route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) {
             RouteView(storage: .\(route.name))
           }
       """
   }
 
   return """
-        let \(route.name) = collection.route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) { context throws(RouteValueError) in
+        let \(route.name) = collection._route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) { context throws(RouteValueError) in
           RouteView(storage: .\(route.name)(\(storageArguments)))
         }
     """

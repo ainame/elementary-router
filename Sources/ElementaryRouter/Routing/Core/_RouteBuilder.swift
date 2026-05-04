@@ -1,6 +1,6 @@
 import ElementaryUI
 
-public final class RouteCollection<RouteContent: View> {
+public final class _RouteBuilder<RouteContent: View> {
   private var records: [RecordBuilder] = []
   private var notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   private var errorRenderer: ((RouteErrorContext) -> RouteContent)?
@@ -9,15 +9,15 @@ public final class RouteCollection<RouteContent: View> {
   public init() {}
 
   @discardableResult
-  public func route(
+  public func _route(
     _ path: String,
     @HTMLBuilder render: @escaping () -> RouteContent
   ) -> RouteHandle {
-    route(path, parent: nil, render: render)
+    _route(path, parent: nil, render: render)
   }
 
   @discardableResult
-  public func route(
+  public func _route(
     _ path: String,
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping () -> RouteContent
@@ -30,15 +30,15 @@ public final class RouteCollection<RouteContent: View> {
   }
 
   @discardableResult
-  public func route(
+  public func _route(
     _ path: String,
     @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    route(path, parent: nil, render: render)
+    _route(path, parent: nil, render: render)
   }
 
   @discardableResult
-  public func route(
+  public func _route(
     _ path: String,
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
@@ -46,19 +46,19 @@ public final class RouteCollection<RouteContent: View> {
     return add(path: path, parent: parent, render: render)
   }
 
-  public func notFound(
+  public func _notFound(
     @HTMLBuilder render: @escaping (RouteNotFoundContext) -> RouteContent
   ) {
     notFoundRenderer = render
   }
 
-  public func error(
+  public func _error(
     @HTMLBuilder render: @escaping (RouteErrorContext) -> RouteContent
   ) {
     errorRenderer = render
   }
 
-  public func freeze() throws(RouteTreeError) -> RouteTree<RouteContent> {
+  public func _build() throws(RouteTreeError) -> RouteTree<RouteContent> {
     var compiled: [RouteTree<RouteContent>.Record] = []
     var seenPaths: [String] = []
     let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })

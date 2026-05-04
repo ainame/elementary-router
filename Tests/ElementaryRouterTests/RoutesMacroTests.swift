@@ -176,14 +176,14 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
+              let collection = _RouteBuilder<RouteView>()
 
-                  let user = collection.route("/users/:id", parent: nil) { context throws(RouteValueError) in
+                  let user = collection._route("/users/:id", parent: nil) { context throws(RouteValueError) in
                 RouteView(storage: .user(id: try context.params.require("id", Int.self), tab: context.query.get("tab", String.self) ?? "overview"))
               }
 
               return RouteSet(
-                tree: try collection.freeze(),
+                tree: try collection._build(),
                 handles: Handles(user: user)
               )
             }
@@ -391,14 +391,14 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
+              let collection = _RouteBuilder<RouteView>()
 
-                  let valid = collection.route("/valid", parent: nil) {
+                  let valid = collection._route("/valid", parent: nil) {
                 RouteView(storage: .valid)
               }
 
               return RouteSet(
-                tree: try collection.freeze(),
+                tree: try collection._build(),
                 handles: Handles(valid: valid)
               )
             }
@@ -596,14 +596,14 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
+              let collection = _RouteBuilder<RouteView>()
 
-                  let user = collection.route("/users/:id", parent: nil) {
+                  let user = collection._route("/users/:id", parent: nil) {
                 RouteView(storage: .user)
               }
 
               return RouteSet(
-                tree: try collection.freeze(),
+                tree: try collection._build(),
                 handles: Handles(user: user)
               )
             }
@@ -786,14 +786,14 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteCollection<RouteView>()
+              let collection = _RouteBuilder<RouteView>()
 
-                  let docs = collection.route("/docs/*", parent: nil) { context throws(RouteValueError) in
+                  let docs = collection._route("/docs/*", parent: nil) { context throws(RouteValueError) in
                 RouteView(storage: .docs(splat: try context.params.require("*", String.self)))
               }
 
               return RouteSet(
-                tree: try collection.freeze(),
+                tree: try collection._build(),
                 handles: Handles(docs: docs)
               )
             }
