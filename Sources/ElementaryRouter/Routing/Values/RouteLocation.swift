@@ -1,9 +1,15 @@
+/// A browser location split into path, query string, hash, and optional history state.
 public struct RouteLocation: Equatable, Sendable {
+  /// The normalized route path. Empty paths are normalized to `/`.
   public var path: String
+  /// The raw query string without a leading `?`.
   public var queryString: String
+  /// The raw hash fragment without a leading `#`.
   public var hash: String
+  /// The associated browser history state, if any.
   public var state: String?
 
+  /// Creates a location from already separated URL parts.
   public init(path: String = "/", queryString: String = "", hash: String = "", state: String? = nil) {
     self.path = RouteLocation.normalizedPath(path)
     self.queryString = RouteLocation.trimmedQuery(queryString)
@@ -11,11 +17,13 @@ public struct RouteLocation: Equatable, Sendable {
     self.state = state
   }
 
+  /// Creates a location by splitting a single URL-like string.
   public init(url: String, state: String? = nil) {
     let parts = RouteLocation.split(url)
     self.init(path: parts.path, queryString: parts.query, hash: parts.hash, state: state)
   }
 
+  /// Returns the string form used for browser navigation and links.
   public var href: String {
     var result = path
     if !queryString.isEmpty {

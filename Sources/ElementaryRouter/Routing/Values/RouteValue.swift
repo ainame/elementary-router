@@ -1,6 +1,13 @@
+/// Converts a value between its typed form and its URL string representation.
+///
+/// `RouteValue` is used by `RouteValues`, route-path matching, and query decoding. Conforming
+/// types must provide a stable string encoding and a parser from that encoding.
 public protocol RouteValue: Sendable {
+  /// Human-readable type name used in decoding errors.
   static var routeValueTypeName: String { get }
+  /// Parses a typed value from a raw URL string.
   static func parseRouteValue(_ rawValue: String) -> Self?
+  /// Encodes the value as a URL string.
   var routeValueString: String { get }
 }
 

@@ -1,10 +1,17 @@
 import ElementaryUI
 
+/// Errors thrown while building an href from a route handle.
 public enum RouteMatchError: Error, Equatable, Sendable {
+  /// The supplied route handle was not registered in this tree.
   case unknownRoute
+  /// A required path parameter was missing while building the target URL.
   case missingRequiredParameter(name: String)
 }
 
+/// The compiled route graph used by `Router` and `HashRouter`.
+///
+/// `RouteTree` is normally produced by `@Routes` through generated `routes()` APIs. It remains
+/// public so the generated code in downstream modules can construct typed routers.
 public struct RouteTree<RouteContent: View> {
   struct Record {
     let handle: RouteHandle
@@ -32,6 +39,7 @@ public struct RouteTree<RouteContent: View> {
     return matchStack(for: leaf, location: location)
   }
 
+  /// Builds an href for a route handle using the supplied path, query, and hash values.
   public func _href(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),

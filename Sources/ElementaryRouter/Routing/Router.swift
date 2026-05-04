@@ -17,13 +17,20 @@ final class RouterState {
   }
 }
 
+/// A browser path router backed by `history.pushState`.
 public final class Router<RouteContent: View> {
+  /// Controls how `isActive` evaluates a candidate route against the current location.
   public struct ActiveMatchOptions: Equatable, Sendable {
+    /// When `true`, parent routes count as active when a descendant route is currently matched.
     public var includeDescendants: Bool
+    /// Optional path parameters that must match for the route to be considered active.
     public var params: RouteValues?
+    /// Optional query values that must match for the route to be considered active.
     public var query: RouteValues?
+    /// Optional hash fragment that must match for the route to be considered active.
     public var hash: String?
 
+    /// Creates a new active-route comparison policy.
     public init(
       includeDescendants: Bool = false,
       params: RouteValues? = nil,
@@ -36,10 +43,12 @@ public final class Router<RouteContent: View> {
       self.hash = hash
     }
 
+    /// Matches only the exact route, params, query, and hash provided.
     public static var exact: Self {
       Self()
     }
 
+    /// Matches the route or any currently active descendant of that route.
     public static var descendant: Self {
       Self(includeDescendants: true)
     }
@@ -47,26 +56,32 @@ public final class Router<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, BrowserHistory>
 
+  /// Creates a path router for the given compiled route tree.
   public init(routes: RouteTree<RouteContent>) {
     self.storage = HistoryRouter(routes: routes, history: BrowserHistory())
   }
 
+  /// The current browser location.
   public var location: RouteLocation {
     storage.location
   }
 
+  /// The matched route stack from parent to leaf.
   public var matchedRoutes: [RouteHandle] {
     storage.matches.map(\.route)
   }
 
+  /// The currently matched leaf route, if any.
   public var currentRoute: RouteHandle? {
     storage.currentMatch?.route
   }
 
+  /// The current leaf route's decoded path parameters, if any.
   public var currentParams: RouteValues? {
     storage.currentMatch?.params
   }
 
+  /// Builds an href for a registered route handle.
   public func href(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -76,6 +91,7 @@ public final class Router<RouteContent: View> {
     try storage.href(to: route, params: params, query: query, hash: hash)
   }
 
+  /// Navigates to a registered route handle.
   public func navigate(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -86,10 +102,12 @@ public final class Router<RouteContent: View> {
     try storage.navigate(to: route, params: params, query: query, hash: hash, replace: replace)
   }
 
+  /// Navigates directly to a raw browser location.
   public func navigate(to location: RouteLocation, replace: Bool = false) {
     storage.navigate(to: location, replace: replace)
   }
 
+  /// Replaces the current browser history entry with a registered route handle.
   public func replace(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -99,14 +117,17 @@ public final class Router<RouteContent: View> {
     try storage.replace(to: route, params: params, query: query, hash: hash)
   }
 
+  /// Navigates one browser history entry backward.
   public func back() {
     storage.back()
   }
 
+  /// Navigates one browser history entry forward.
   public func forward() {
     storage.forward()
   }
 
+  /// Returns `true` when the given route is active under the supplied matching options.
   public func isActive(
     _ route: RouteHandle,
     options: ActiveMatchOptions = .exact
@@ -114,36 +135,44 @@ public final class Router<RouteContent: View> {
     storage.isActive(route, options: options)
   }
 
+  /// Resolves and renders the current route.
   public func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
     try storage.renderCurrentRoute()
   }
 }
 
+/// A browser router that stores route state in the URL hash fragment.
 public final class HashRouter<RouteContent: View> {
   public typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
   private let storage: HistoryRouter<RouteContent, HashHistory>
 
+  /// Creates a hash router for the given compiled route tree.
   public init(routes: RouteTree<RouteContent>) {
     self.storage = HistoryRouter(routes: routes, history: HashHistory())
   }
 
+  /// The current browser location.
   public var location: RouteLocation {
     storage.location
   }
 
+  /// The matched route stack from parent to leaf.
   public var matchedRoutes: [RouteHandle] {
     storage.matches.map(\.route)
   }
 
+  /// The currently matched leaf route, if any.
   public var currentRoute: RouteHandle? {
     storage.currentMatch?.route
   }
 
+  /// The current leaf route's decoded path parameters, if any.
   public var currentParams: RouteValues? {
     storage.currentMatch?.params
   }
 
+  /// Builds an href for a registered route handle.
   public func href(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -153,6 +182,7 @@ public final class HashRouter<RouteContent: View> {
     try storage.href(to: route, params: params, query: query, hash: hash)
   }
 
+  /// Navigates to a registered route handle.
   public func navigate(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -163,10 +193,12 @@ public final class HashRouter<RouteContent: View> {
     try storage.navigate(to: route, params: params, query: query, hash: hash, replace: replace)
   }
 
+  /// Navigates directly to a raw browser location.
   public func navigate(to location: RouteLocation, replace: Bool = false) {
     storage.navigate(to: location, replace: replace)
   }
 
+  /// Replaces the current browser history entry with a registered route handle.
   public func replace(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -176,14 +208,17 @@ public final class HashRouter<RouteContent: View> {
     try storage.replace(to: route, params: params, query: query, hash: hash)
   }
 
+  /// Navigates one browser history entry backward.
   public func back() {
     storage.back()
   }
 
+  /// Navigates one browser history entry forward.
   public func forward() {
     storage.forward()
   }
 
+  /// Returns `true` when the given route is active under the supplied matching options.
   public func isActive(
     _ route: RouteHandle,
     options: ActiveMatchOptions = .exact
@@ -191,6 +226,7 @@ public final class HashRouter<RouteContent: View> {
     storage.isActive(route, options: options)
   }
 
+  /// Resolves and renders the current route.
   public func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
     try storage.renderCurrentRoute()
   }
