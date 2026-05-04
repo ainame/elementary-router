@@ -79,7 +79,7 @@ let router = try AppRoutes.router()
 If you also need the generated handles or href helpers, build the route set separately:
 
 ```swift
-let routeSet = try AppRoutes.routes()
+let routes = try AppRoutes.routes()
 let router = try AppRoutes.router()
 ```
 
@@ -95,14 +95,16 @@ let router = try DocsRoutes.router()
 Render the current route with the generated typed route view:
 
 ```swift
-AppRoutes.Provider(router) {
-  RouterView(router) { _ in
-    AppRoutes.RouteView(
-      storage: .notFound(
-        RouteNotFoundContext(location: router.location, query: RouteValues())
-      )
+let routeContent = RouterView(router) { _ in
+  AppRoutes.RouteView(
+    storage: .notFound(
+      RouteNotFoundContext(location: router.location, query: RouteValues())
     )
-  }
+  )
+}
+
+AppRoutes.Provider(router) {
+  ContentView(routes: routes, routeContent: routeContent)
 }
 ```
 
@@ -110,14 +112,14 @@ Generate links with route handles or generated href helpers:
 
 ```swift
 AppRoutes.Link(
-  to: routeSet.handles.profile,
+  to: routes.handles.profile,
   params: ["lang": "ja", "profileId": 42],
   query: ["tab": "posts"]
 ) {
   "Profile"
 }
 
-let href = try routeSet.profileHref(lang: "ja", profileId: 42, tab: "posts")
+let href = try routes.profileHref(lang: "ja", profileId: 42, tab: "posts")
 ```
 
 ## Macros
@@ -140,7 +142,7 @@ The macro generates:
 - `AppRoutes.RouteSet`: the generated handles plus router-aware href helpers
 - `AppRoutes.Provider`: a typed router provider for this route declaration
 - `AppRoutes.Link`: a typed link view for this route declaration
-- `AppRoutes.routes()`: the factory used to build a router
+- `AppRoutes.routes()`: the factory used to build the generated route set
 - `AppRoutes.router()`: the typed router factory for the declared routing mode
 - route-specific href helpers, such as `profileHref(...)`
 
@@ -183,8 +185,8 @@ static func docs(splat: Wildcard) -> DocsPage {
 The generated handle and href helper use the route function name:
 
 ```swift
-routeSet.handles.profile
-try routeSet.profileHref(lang: "ja", profileId: 42, tab: "posts")
+routes.handles.profile
+try routes.profileHref(lang: "ja", profileId: 42, tab: "posts")
 ```
 
 ### `@Layout`

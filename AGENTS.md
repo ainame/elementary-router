@@ -21,7 +21,7 @@
   - `HashHistory` behind `HashRouter`.
   - internal `MemoryHistory` for tests and non-JS fallback.
 - Use `RouteValues` for path params and query params. It supports dictionary literals and tuple-list initialization.
-- `RouteHandle` and `RouteID` should be created by route registration only. Do not add public initializers unless the route identity model is redesigned.
+- `RouteHandle` and its nested `RouteHandle.ID` should be created by route registration only. Do not add public initializers unless the route identity model is redesigned.
 - `Router.matchedRoutes` is the parent-to-leaf match stack. `Router.currentRoute` and `Router.currentParams` are leaf conveniences.
 - Route rendering fallbacks must not live inside a view's `body`. Keep not-found and error policy on route/router configuration.
 
