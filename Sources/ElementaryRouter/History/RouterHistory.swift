@@ -6,8 +6,26 @@ protocol RouterHistory: AnyObject {
   func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription
 }
 
-extension RouterHistory where Self == MemoryHistory {
-  static func memory(initialPath: String = "/") -> MemoryHistory {
-    MemoryHistory(initialPath: initialPath)
+enum HistoryAction: Equatable, Sendable {
+  case push
+  case replace
+  case pop
+}
+
+struct HistoryUpdate: Equatable, Sendable {
+  let action: HistoryAction
+  let location: RouteLocation
+}
+
+final class HistorySubscription {
+  private var cancelBody: (() -> Void)?
+
+  init(_ cancelBody: @escaping () -> Void) {
+    self.cancelBody = cancelBody
+  }
+
+  func cancel() {
+    cancelBody?()
+    cancelBody = nil
   }
 }
