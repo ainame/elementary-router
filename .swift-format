@@ -3,7 +3,7 @@
     "spaces" : 2
   },
   "lineBreakBeforeEachArgument" : true,
-  "lineLength" : 100,
+  "lineLength" : 140,
   "multiElementCollectionTrailingCommas" : true,
   "respectsExistingLineBreaks" : true,
   "rules" : {

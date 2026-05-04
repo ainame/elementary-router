@@ -4,8 +4,7 @@ public struct RouteLocation: Equatable, Sendable {
   public var hash: String
   public var state: String?
 
-  public init(path: String = "/", queryString: String = "", hash: String = "", state: String? = nil)
-  {
+  public init(path: String = "/", queryString: String = "", hash: String = "", state: String? = nil) {
     self.path = RouteLocation.normalizedPath(path)
     self.queryString = RouteLocation.trimmedQuery(queryString)
     self.hash = RouteLocation.trimmedHash(hash)
