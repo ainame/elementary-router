@@ -25,6 +25,7 @@ npm run build
 - `/stats`: task metrics
 - `/todo/:todoID`: task detail
 
-The app keeps task state in a shared `TodoStore`, places it in the ElementaryUI
-environment, and renders each route through the macro-generated typed route
-view.
+The app keeps task state in `AppRoot`, places it in the ElementaryUI
+environment above `AppRoutes.RouterView()`, and renders each route through the
+macro-generated typed route view. The root route layout reads `TodoStore` from
+the environment instead of owning it, so navigation does not reset task state.

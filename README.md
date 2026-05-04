@@ -210,6 +210,28 @@ A layout route must accept `Outlet<Content>` and return a view that renders that
 outlet. Child routes matched under the layout are composed into the outlet by
 the generated typed `RouteView`.
 
+Treat `@Layout` as route composition, not as an application state boundary.
+The router may recreate layout view values while resolving a new location, so
+state that must survive navigation should live above `AppRoutes.RouterView()`
+and be passed through ElementaryUI's environment:
+
+```swift
+@View
+struct AppRoot {
+  @State var store = TodoStore()
+
+  var body: some View {
+    AppRoutes.RouterView()
+      .environment(store)
+  }
+}
+```
+
+Layout views can read shared state from the environment, but they should not own
+durable app state such as stores, sessions, or caches. This keeps route
+composition close to TanStack Router's layout idea without making Swift view
+identity part of the router's state model.
+
 ### `@NotFound`
 
 Use `@NotFound` to declare the route set's not-found fallback:
@@ -246,7 +268,7 @@ an invalid `Int` path parameter.
 - `Router.currentRoute` and `Router.currentParams` are leaf conveniences.
 - `Router` uses standard browser path routing.
 - `HashRouter` is available when you explicitly want hash-based routing.
-- `@Layout` composes nested route UI through `Outlet<Content>`.
+- `@Layout` composes nested route UI through `Outlet<Content>`; keep durable app state above the router view.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
 - `RouteValues` is used for both path params and query params.
 - `Query<T>` maps query values into typed route function parameters.
