@@ -102,6 +102,35 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
+            struct RouterView {
+              @Environment(AppRoutes._routerEnvironmentKey) var router
+
+              let renderError: (RouterRenderError, RouteLocation) -> RouteView
+
+              init(
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+              ) {
+                self.renderError = renderError
+              }
+
+              var body: some View {
+                rendered
+              }
+
+              private var rendered: RouteView {
+                guard let router else {
+                  return renderError(.routeNotFound, RouteLocation())
+                }
+
+                do {
+                  return try router.renderCurrentRoute()
+                } catch {
+                  return renderError(error, router.location)
+                }
+              }
+            }
+
+          @View
             struct Link<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
@@ -317,6 +346,35 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
+            struct RouterView {
+              @Environment(AppRoutes._routerEnvironmentKey) var router
+
+              let renderError: (RouterRenderError, RouteLocation) -> RouteView
+
+              init(
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+              ) {
+                self.renderError = renderError
+              }
+
+              var body: some View {
+                rendered
+              }
+
+              private var rendered: RouteView {
+                guard let router else {
+                  return renderError(.routeNotFound, RouteLocation())
+                }
+
+                do {
+                  return try router.renderCurrentRoute()
+                } catch {
+                  return renderError(error, router.location)
+                }
+              }
+            }
+
+          @View
             struct Link<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
@@ -522,6 +580,35 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           @View
+            struct RouterView {
+              @Environment(AppRoutes._routerEnvironmentKey) var router
+
+              let renderError: (RouterRenderError, RouteLocation) -> RouteView
+
+              init(
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+              ) {
+                self.renderError = renderError
+              }
+
+              var body: some View {
+                rendered
+              }
+
+              private var rendered: RouteView {
+                guard let router else {
+                  return renderError(.routeNotFound, RouteLocation())
+                }
+
+                do {
+                  return try router.renderCurrentRoute()
+                } catch {
+                  return renderError(error, router.location)
+                }
+              }
+            }
+
+          @View
             struct Link<Content: View> {
               @Environment(AppRoutes._routerEnvironmentKey) var router
 
@@ -708,6 +795,35 @@ final class RoutesMacroTests: XCTestCase {
 
               var body: some View {
                 content.environment(DocsRoutes._routerEnvironmentKey, router)
+              }
+            }
+
+          @View
+            struct RouterView {
+              @Environment(DocsRoutes._routerEnvironmentKey) var router
+
+              let renderError: (RouterRenderError, RouteLocation) -> RouteView
+
+              init(
+                onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+              ) {
+                self.renderError = renderError
+              }
+
+              var body: some View {
+                rendered
+              }
+
+              private var rendered: RouteView {
+                guard let router else {
+                  return renderError(.routeNotFound, RouteLocation())
+                }
+
+                do {
+                  return try router.renderCurrentRoute()
+                } catch {
+                  return renderError(error, router.location)
+                }
               }
             }
 

@@ -159,6 +159,12 @@ public enum RoutesMacro: MemberMacro {
         )
       ),
       DeclSyntax(
+        stringLiteral: routerViewDeclaration(
+          access: access,
+          containerName: containerName
+        )
+      ),
+      DeclSyntax(
         stringLiteral: linkDeclaration(
           access: access,
           containerName: containerName
@@ -608,6 +614,42 @@ private func providerDeclaration(
 
         \(access)var body: some View {
           content.environment(\(containerName)._routerEnvironmentKey, router)
+        }
+      }
+    """
+}
+
+private func routerViewDeclaration(
+  access: String,
+  containerName: String
+) -> String {
+  return """
+      @View
+      \(access)struct RouterView {
+        @Environment(\(containerName)._routerEnvironmentKey) var router
+
+        let renderError: (RouterRenderError, RouteLocation) -> RouteView
+
+        \(access)init(
+          onError renderError: @escaping (RouterRenderError, RouteLocation) -> RouteView
+        ) {
+          self.renderError = renderError
+        }
+
+        \(access)var body: some View {
+          rendered
+        }
+
+        private var rendered: RouteView {
+          guard let router else {
+            return renderError(.routeNotFound, RouteLocation())
+          }
+
+          do {
+            return try router.renderCurrentRoute()
+          } catch {
+            return renderError(error, router.location)
+          }
         }
       }
     """

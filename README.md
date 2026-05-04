@@ -95,16 +95,20 @@ let router = try DocsRoutes.router()
 Render the current route with the generated typed route view:
 
 ```swift
-let routeContent = RouterView(router) { _ in
+AppRoutes.Provider(router) {
+  ContentView(routes: routes)
+}
+```
+
+Inside views below the provider, use the generated route-specific router view:
+
+```swift
+AppRoutes.RouterView { _, location in
   AppRoutes.RouteView(
     storage: .notFound(
-      RouteNotFoundContext(location: router.location, query: RouteValues())
+      RouteNotFoundContext(location: location, query: RouteValues())
     )
   )
-}
-
-AppRoutes.Provider(router) {
-  ContentView(routes: routes, routeContent: routeContent)
 }
 ```
 
@@ -141,6 +145,7 @@ The macro generates:
 - `AppRoutes.Handles`: named route handles
 - `AppRoutes.RouteSet`: the generated handles plus router-aware href helpers
 - `AppRoutes.Provider`: a typed router provider for this route declaration
+- `AppRoutes.RouterView`: a typed view that renders the current route from the provider
 - `AppRoutes.Link`: a typed link view for this route declaration
 - `AppRoutes.routes()`: the factory used to build the generated route set
 - `AppRoutes.router()`: the typed router factory for the declared routing mode
@@ -265,7 +270,8 @@ behavior.
 
 `AppRoutes.Provider` installs a concrete `Router<AppRoutes.RouteView>` or
 `HashRouter<AppRoutes.RouteView>` in ElementaryUI's environment, and
-`AppRoutes.Link(to:)` reads that typed router back without existential erasure.
+`AppRoutes.RouterView` and `AppRoutes.Link(to:)` read that typed router back
+without existential erasure.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call
@@ -315,7 +321,7 @@ In scope for 0.0.1:
 - nested typed layouts with `@Layout` and `Outlet<Content>`
 - browser routing, hash routing, and internal test adapters
 - route handles, href helpers, active matching, not-found, and route-error fallback rendering
-- typed route-set `Provider` and `Link` generation
+- typed route-set `Provider`, `RouterView`, and `Link` generation
 
 Out of scope for 0.0.1:
 

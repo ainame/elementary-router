@@ -6,7 +6,6 @@ struct ContentView {
   @State var store = TodoStore()
 
   let routes: AppRoutes.RouteSet
-  let routeContent: RouterView<AppRoutes.RouteView>
 
   var body: some View {
     div(.style(pageStyle)) {
@@ -28,7 +27,13 @@ struct ContentView {
       }
 
       main(.style(mainStyle)) {
-        routeContent
+        AppRoutes.RouterView { _, location in
+          AppRoutes.RouteView(
+            storage: .notFound(
+              RouteNotFoundContext(location: location, query: RouteValues())
+            )
+          )
+        }
       }
     }
     .environment(store)
