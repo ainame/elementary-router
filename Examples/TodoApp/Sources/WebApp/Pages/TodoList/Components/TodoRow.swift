@@ -18,7 +18,10 @@ struct TodoRow {
           )
         )
       div(.style(rowContentStyle)) {
-        AppRoutes.Link(to: detailRoute, params: ["todoID": _RouteValueLiteral(todo.id)]) {
+        AppRoutes.Link(
+          to: detailRoute,
+          params: ["todoID": RouteParameters.ValueLiteral(todo.id)]
+        ) {
           todo.title
         }
         span(.style(projectBadgeStyle)) {

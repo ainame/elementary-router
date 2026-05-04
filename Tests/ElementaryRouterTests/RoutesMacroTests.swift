@@ -72,7 +72,7 @@ final class RoutesMacroTests: XCTestCase {
               }
 
               func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
-              let params: RouteParameters = ["id": _RouteValueLiteral(id)]
+              let params: RouteParameters = ["id": RouteParameters.ValueLiteral(id)]
                 var query = RouteParameters()
                 if let tab {
                 query = query.set("tab", tab)
@@ -685,7 +685,7 @@ final class RoutesMacroTests: XCTestCase {
               }
 
               func docsHref(splat: String, hash: String = "") throws(RouteMatchError) -> String {
-              let params: RouteParameters = ["*": _RouteValueLiteral(splat)]
+              let params: RouteParameters = ["*": RouteParameters.ValueLiteral(splat)]
               let query = RouteParameters()
               return try tree._href(to: handles.docs, params: params, query: query, hash: hash)
             }

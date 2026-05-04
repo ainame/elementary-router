@@ -1,4 +1,12 @@
 public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiteral {
+  public struct ValueLiteral: Equatable, Sendable {
+    public let rawValue: String
+
+    public init(_ value: some RouteValue) {
+      self.rawValue = value.routeValueString
+    }
+  }
+
   private var storage: [String: [String]]
   private var order: [(String, String)]
 
@@ -7,14 +15,14 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
     self.order = []
   }
 
-  public init(_ values: (String, _RouteValueLiteral)...) {
+  public init(_ values: (String, ValueLiteral)...) {
     self.init()
     for (name, value) in values {
       append(name, value.rawValue)
     }
   }
 
-  public init(dictionaryLiteral elements: (String, _RouteValueLiteral)...) {
+  public init(dictionaryLiteral elements: (String, ValueLiteral)...) {
     self.init()
     for (name, value) in elements {
       append(name, value.rawValue)
@@ -103,5 +111,29 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
       }
     }
     return true
+  }
+}
+
+extension RouteParameters.ValueLiteral: ExpressibleByStringLiteral {
+  public init(stringLiteral value: String) {
+    self.rawValue = value
+  }
+}
+
+extension RouteParameters.ValueLiteral: ExpressibleByIntegerLiteral {
+  public init(integerLiteral value: Int) {
+    self.rawValue = value.routeValueString
+  }
+}
+
+extension RouteParameters.ValueLiteral: ExpressibleByFloatLiteral {
+  public init(floatLiteral value: Double) {
+    self.rawValue = value.routeValueString
+  }
+}
+
+extension RouteParameters.ValueLiteral: ExpressibleByBooleanLiteral {
+  public init(booleanLiteral value: Bool) {
+    self.rawValue = value.routeValueString
   }
 }
