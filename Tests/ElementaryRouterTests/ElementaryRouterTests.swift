@@ -156,8 +156,8 @@ struct MacroLayoutRoutes {
 @Test func matcherBuildsNestedMatchStack() throws {
   let routes = RouteCollection<EmptyHTML>()
   let users = routes.route("/users") { EmptyHTML() }
-  let user = routes.children(of: users).route(":id") { EmptyHTML() }
-  let settings = routes.children(of: user).route("settings") { EmptyHTML() }
+  let user = routes.route(":id", parent: users) { EmptyHTML() }
+  let settings = routes.route("settings", parent: user) { EmptyHTML() }
   let tree = try routes.freeze()
 
   let matches = tree.matches(RouteLocation(url: "/users/42/settings"))
@@ -235,7 +235,7 @@ struct MacroLayoutRoutes {
 @Test func routerStoresNestedMatchStack() throws {
   let routes = RouteCollection<EmptyHTML>()
   let users = routes.route("/users") { EmptyHTML() }
-  let user = routes.children(of: users).route(":id") { EmptyHTML() }
+  let user = routes.route(":id", parent: users) { EmptyHTML() }
   let tree = try routes.freeze()
   let router = MemoryRouter(routes: tree, history: MemoryHistory(initialPath: "/users/42"))
 
@@ -246,7 +246,7 @@ struct MacroLayoutRoutes {
 @Test func routerSupportsActiveMatchingOptions() throws {
   let routes = RouteCollection<EmptyHTML>()
   let users = routes.route("/users") { EmptyHTML() }
-  let user = routes.children(of: users).route(":id") { EmptyHTML() }
+  let user = routes.route(":id", parent: users) { EmptyHTML() }
   let tree = try routes.freeze()
   let router = MemoryRouter(
     routes: tree,
@@ -344,7 +344,7 @@ struct MacroLayoutRoutes {
     rendered.append("layout:\(try context.params.require("lang"))")
     return EmptyHTML()
   }
-  let profile = routes.children(of: lang).route("profile/:profileId") {
+  let profile = routes.route("profile/:profileId", parent: lang) {
     context throws(RouteValueError) in
     rendered.append("profile:\(try context.params.require("profileId", Int.self))")
     return EmptyHTML()
@@ -369,7 +369,7 @@ struct MacroLayoutRoutes {
     _ = try context.params.require("accountId", Int.self)
     return EmptyHTML()
   }
-  routes.children(of: account).route("settings") {
+  routes.route("settings", parent: account) {
     childRendered = true
     return EmptyHTML()
   }

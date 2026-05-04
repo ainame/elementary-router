@@ -13,11 +13,20 @@ public final class RouteCollection<RouteContent: View> {
     _ path: String,
     @HTMLBuilder render: @escaping () -> RouteContent
   ) -> RouteHandle {
+    route(path, parent: nil, render: render)
+  }
+
+  @discardableResult
+  public func route(
+    _ path: String,
+    parent: RouteHandle?,
+    @HTMLBuilder render: @escaping () -> RouteContent
+  ) -> RouteHandle {
     let typed: (RouteContext) throws(RouteValueError) -> RouteContent = {
       _ throws(RouteValueError) in
       render()
     }
-    return add(path: path, parent: nil, render: typed)
+    return add(path: path, parent: parent, render: typed)
   }
 
   @discardableResult
@@ -25,18 +34,16 @@ public final class RouteCollection<RouteContent: View> {
     _ path: String,
     @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    return add(path: path, parent: nil, render: render)
+    route(path, parent: nil, render: render)
   }
 
-  func scope(_ path: String) -> RouteScope<RouteContent> {
-    RouteScope(collection: self, prefix: path, parent: nil)
-  }
-
-  public func children(of parent: RouteHandle) -> RouteScope<RouteContent> {
-    guard let record = records.first(where: { $0.handle == parent }) else {
-      preconditionFailure("Cannot create child routes for a handle that is not in this collection.")
-    }
-    return RouteScope(collection: self, prefix: record.path, parent: parent)
+  @discardableResult
+  public func route(
+    _ path: String,
+    parent: RouteHandle?,
+    @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
+  ) -> RouteHandle {
+    return add(path: path, parent: parent, render: render)
   }
 
   public func notFound(

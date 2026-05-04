@@ -825,24 +825,24 @@ private func routeRegistration(_ route: RouteDeclaration, parent: RouteDeclarati
 
   if route.storageParameters.isEmpty {
     return """
-          let \(route.name) = \(registrationTarget(parent: parent)).route("\(relativePath(for: route, under: parent))") {
+          let \(route.name) = collection.route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) {
             RouteView(storage: .\(route.name))
           }
       """
   }
 
   return """
-        let \(route.name) = \(registrationTarget(parent: parent)).route("\(relativePath(for: route, under: parent))") { context throws(RouteValueError) in
+        let \(route.name) = collection.route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) { context throws(RouteValueError) in
           RouteView(storage: .\(route.name)(\(storageArguments)))
         }
     """
 }
 
-private func registrationTarget(parent: RouteDeclaration?) -> String {
+private func registrationParent(parent: RouteDeclaration?) -> String {
   guard let parent else {
-    return "collection"
+    return "nil"
   }
-  return "collection.children(of: \(parent.name))"
+  return parent.name
 }
 
 private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) -> String {
