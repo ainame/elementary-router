@@ -67,6 +67,10 @@ final class RoutesMacroTests: XCTestCase {
                 self.handles = handles
               }
 
+              func router() -> Router<RouteView> {
+                Router(routes: tree)
+              }
+
               func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
               let params: RouteParameters = ["id": RouteValueLiteral(id)]
                 var query = RouteParameters()
@@ -174,7 +178,7 @@ final class RoutesMacroTests: XCTestCase {
           static func routes() throws(RouteTreeError) -> RouteSet {
               let collection = RouteCollection<RouteView>()
 
-                  let user = collection.route("/users/:id") { context throws(RouteValueError) in
+                  let user = collection.route("/users/:id", parent: nil) { context throws(RouteValueError) in
                 RouteView(storage: .user(id: try context.params.require("id", Int.self), tab: context.query.get("tab", String.self) ?? "overview"))
               }
 
@@ -185,9 +189,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
             static func router() throws(RouteTreeError) -> Router<RouteView> {
-              let routeSet = try routes()
-              let tree = routeSet.tree
-              return Router(routes: tree)
+              try routes().router()
             }
         }
         """,
@@ -281,6 +283,10 @@ final class RoutesMacroTests: XCTestCase {
               init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
+              }
+
+              func router() -> Router<RouteView> {
+                Router(routes: tree)
               }
 
               func validHref(hash: String = "") throws(RouteMatchError) -> String {
@@ -387,7 +393,7 @@ final class RoutesMacroTests: XCTestCase {
           static func routes() throws(RouteTreeError) -> RouteSet {
               let collection = RouteCollection<RouteView>()
 
-                  let valid = collection.route("/valid") {
+                  let valid = collection.route("/valid", parent: nil) {
                 RouteView(storage: .valid)
               }
 
@@ -398,9 +404,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
             static func router() throws(RouteTreeError) -> Router<RouteView> {
-              let routeSet = try routes()
-              let tree = routeSet.tree
-              return Router(routes: tree)
+              try routes().router()
             }
         }
         """,
@@ -484,6 +488,10 @@ final class RoutesMacroTests: XCTestCase {
               init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
+              }
+
+              func router() -> Router<RouteView> {
+                Router(routes: tree)
               }
 
               func userHref(hash: String = "") throws(RouteMatchError) -> String {
@@ -590,7 +598,7 @@ final class RoutesMacroTests: XCTestCase {
           static func routes() throws(RouteTreeError) -> RouteSet {
               let collection = RouteCollection<RouteView>()
 
-                  let user = collection.route("/users/:id") {
+                  let user = collection.route("/users/:id", parent: nil) {
                 RouteView(storage: .user)
               }
 
@@ -601,9 +609,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
             static func router() throws(RouteTreeError) -> Router<RouteView> {
-              let routeSet = try routes()
-              let tree = routeSet.tree
-              return Router(routes: tree)
+              try routes().router()
             }
         }
         """,
@@ -672,6 +678,10 @@ final class RoutesMacroTests: XCTestCase {
               init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
+              }
+
+              func router() -> HashRouter<RouteView> {
+                HashRouter(routes: tree)
               }
 
               func docsHref(splat: String, hash: String = "") throws(RouteMatchError) -> String {
@@ -778,7 +788,7 @@ final class RoutesMacroTests: XCTestCase {
           static func routes() throws(RouteTreeError) -> RouteSet {
               let collection = RouteCollection<RouteView>()
 
-                  let docs = collection.route("/docs/*") { context throws(RouteValueError) in
+                  let docs = collection.route("/docs/*", parent: nil) { context throws(RouteValueError) in
                 RouteView(storage: .docs(splat: try context.params.require("*", String.self)))
               }
 
@@ -789,9 +799,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
             static func router() throws(RouteTreeError) -> HashRouter<RouteView> {
-              let routeSet = try routes()
-              let tree = routeSet.tree
-              return HashRouter(routes: tree)
+              try routes().router()
             }
         }
         """,

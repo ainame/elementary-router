@@ -3,7 +3,7 @@
 `ElementaryRouter` is a URL state router for ElementaryUI on Swift/WASM.
 
 The 0.0.1 API is macro-based. `@Routes` generates a single typed route view,
-route handles, href helpers, and the `RouteTree` used by `Router`. This keeps
+route handles, href helpers, and typed router helpers. This keeps
 route rendering on upstream ElementaryUI without a vendored `AnyView` or runtime
 type-erased view layer.
 
@@ -137,7 +137,7 @@ The macro generates:
 
 - `AppRoutes.RouteView`: a single typed view union for all route outputs
 - `AppRoutes.Handles`: named route handles
-- `AppRoutes.RouteSet`: the generated route tree plus handles
+- `AppRoutes.RouteSet`: the generated handles plus router-aware href helpers
 - `AppRoutes.Provider`: a typed router provider for this route declaration
 - `AppRoutes.Link`: a typed link view for this route declaration
 - `AppRoutes.routes()`: the factory used to build a router

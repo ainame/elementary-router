@@ -137,7 +137,12 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: handlesDeclaration(access: access, routes: routes, layouts: layouts)
       ),
       DeclSyntax(
-        stringLiteral: routeSetDeclaration(access: access, routes: routes, layouts: layouts)
+        stringLiteral: routeSetDeclaration(
+          access: access,
+          mode: mode,
+          routes: routes,
+          layouts: layouts
+        )
       ),
       DeclSyntax(
         stringLiteral: routerEnvironmentKeyDeclaration(
@@ -555,20 +560,27 @@ private func handlesDeclaration(
 
 private func routeSetDeclaration(
   access: String,
+  mode: RoutesMode,
   routes: [RouteDeclaration],
   layouts: [RouteDeclaration]
 ) -> String {
   let hrefs = (layouts + routes).map { hrefFunctionDeclaration(access: access, route: $0) }
     .joined(separator: "\n\n")
+  let routerType = routerType(mode: mode, routeViewType: "RouteView")
+  let routerInitializer = routerInitializer(mode: mode, treeName: "tree")
 
   return """
       \(access)struct RouteSet {
-        \(access)let tree: RouteTree<RouteView>
+        let tree: RouteTree<RouteView>
         \(access)let handles: Handles
 
-        \(access)init(tree: RouteTree<RouteView>, handles: Handles) {
+        init(tree: RouteTree<RouteView>, handles: Handles) {
           self.tree = tree
           self.handles = handles
+        }
+
+        \(access)func router() -> \(routerType) {
+          \(routerInitializer)
         }
 
       \(hrefs)
@@ -690,7 +702,7 @@ private func routerEnvironmentKeyDeclaration(
   let router = routerType(mode: mode, routeViewType: "RouteView")
 
   return """
-      \(access)static let _routerEnvironmentKey = EnvironmentValues._Key<\(router)?>(
+      static let _routerEnvironmentKey = EnvironmentValues._Key<\(router)?>(
         "ElementaryRouter.\(containerName).router",
         defaultValue: nil
       )
@@ -729,9 +741,6 @@ private func routesFunctionDeclaration(
   }
 
   let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
-  let routerType = routerType(mode: mode, routeViewType: "RouteView")
-  let routerInitializer = routerInitializer(mode: mode, treeName: "tree")
-
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
         let collection = RouteCollection<RouteView>()
@@ -744,10 +753,8 @@ private func routesFunctionDeclaration(
         )
       }
 
-      \(access)static func router() throws(RouteTreeError) -> \(routerType) {
-        let routeSet = try routes()
-        let tree = routeSet.tree
-        return \(routerInitializer)
+      \(access)static func router() throws(RouteTreeError) -> \(routerType(mode: mode, routeViewType: "RouteView")) {
+        try routes().router()
       }
     """
 }

@@ -61,9 +61,10 @@ public final class RouteCollection<RouteContent: View> {
   public func freeze() throws(RouteTreeError) -> RouteTree<RouteContent> {
     var compiled: [RouteTree<RouteContent>.Record] = []
     var seenPaths: [String] = []
+    let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })
 
     for record in records {
-      let pattern = try RoutePattern(record.path)
+      let pattern = try RoutePattern(resolvedPath(for: record, recordsByID: recordsByID))
       if seenPaths.contains(pattern.path) {
         throw RouteTreeError.duplicateRoute(path: pattern.path)
       }
@@ -110,5 +111,27 @@ public final class RouteCollection<RouteContent: View> {
     let parent: RouteHandle?
     let path: String
     let render: (RouteContext) throws(RouteValueError) -> RouteContent
+  }
+
+  private func resolvedPath(
+    for record: RecordBuilder,
+    recordsByID: [RouteHandle.ID: RecordBuilder]
+  ) -> String {
+    guard let parent = record.parent, let parentRecord = recordsByID[parent.id] else {
+      return record.path
+    }
+
+    let parentPath = RouteLocation.normalizedPath(
+      resolvedPath(for: parentRecord, recordsByID: recordsByID)
+    )
+    if record.path == "/" {
+      return parentPath
+    }
+
+    let childPath = record.path == "/" ? "" : record.path
+    let trimmedParent =
+      parentPath.count > 1 && parentPath.last == "/" ? String(parentPath.dropLast()) : parentPath
+    let trimmedChild = childPath.first == "/" ? String(childPath.dropFirst()) : childPath
+    return trimmedChild.isEmpty ? trimmedParent : trimmedParent + "/" + trimmedChild
   }
 }
