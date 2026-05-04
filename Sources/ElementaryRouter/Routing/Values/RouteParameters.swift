@@ -7,14 +7,14 @@ public struct RouteParameters: Equatable, Sendable, ExpressibleByDictionaryLiter
     self.order = []
   }
 
-  public init(_ values: (String, RouteValueLiteral)...) {
+  public init(_ values: (String, _RouteValueLiteral)...) {
     self.init()
     for (name, value) in values {
       append(name, value.rawValue)
     }
   }
 
-  public init(dictionaryLiteral elements: (String, RouteValueLiteral)...) {
+  public init(dictionaryLiteral elements: (String, _RouteValueLiteral)...) {
     self.init()
     for (name, value) in elements {
       append(name, value.rawValue)

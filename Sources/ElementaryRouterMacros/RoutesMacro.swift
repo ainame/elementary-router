@@ -869,7 +869,7 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
 
   let pathPairs = pathParameters.map { parameter in
     let key = parameter.kind == .wildcard ? "*" : parameter.label
-    return "\"\(key)\": RouteValueLiteral(\(parameter.label))"
+    return "\"\(key)\": _RouteValueLiteral(\(parameter.label))"
   }.joined(separator: ", ")
 
   let paramsBuilder: String
