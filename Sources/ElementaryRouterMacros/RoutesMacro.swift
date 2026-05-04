@@ -571,10 +571,10 @@ private func routeSetDeclaration(
 
   return """
       \(access)struct RouteSet {
-        let tree: _RouteTree<RouteView>
+        let tree: RouteTree<RouteView>
         \(access)let handles: Handles
 
-        init(tree: _RouteTree<RouteView>, handles: Handles) {
+        init(tree: RouteTree<RouteView>, handles: Handles) {
           self.tree = tree
           self.handles = handles
         }
@@ -743,7 +743,7 @@ private func routesFunctionDeclaration(
   let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
-        let collection = _RouteBuilder<RouteView>()
+        let collection = RouteBuilder<RouteView>()
         \(layoutRegistrations.joined(separator: "\n"))
         \(registrations.joined(separator: "\n"))
         \([notFoundRegistration, errorRegistration].compactMap { $0 }.joined(separator: "\n"))

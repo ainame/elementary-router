@@ -59,10 +59,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: _RouteTree<RouteView>
+              let tree: RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: _RouteTree<RouteView>, handles: Handles) {
+              init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -176,7 +176,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = _RouteBuilder<RouteView>()
+              let collection = RouteBuilder<RouteView>()
 
                   let user = collection._route("/users/:id", parent: nil) { context throws(RouteValueError) in
                 RouteView(storage: .user(id: try context.params.require("id", Int.self), tab: context.query.get("tab", String.self) ?? "overview"))
@@ -277,10 +277,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: _RouteTree<RouteView>
+              let tree: RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: _RouteTree<RouteView>, handles: Handles) {
+              init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -391,7 +391,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = _RouteBuilder<RouteView>()
+              let collection = RouteBuilder<RouteView>()
 
                   let valid = collection._route("/valid", parent: nil) {
                 RouteView(storage: .valid)
@@ -482,10 +482,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: _RouteTree<RouteView>
+              let tree: RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: _RouteTree<RouteView>, handles: Handles) {
+              init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -596,7 +596,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = _RouteBuilder<RouteView>()
+              let collection = RouteBuilder<RouteView>()
 
                   let user = collection._route("/users/:id", parent: nil) {
                 RouteView(storage: .user)
@@ -672,10 +672,10 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           struct RouteSet {
-              let tree: _RouteTree<RouteView>
+              let tree: RouteTree<RouteView>
               let handles: Handles
 
-              init(tree: _RouteTree<RouteView>, handles: Handles) {
+              init(tree: RouteTree<RouteView>, handles: Handles) {
                 self.tree = tree
                 self.handles = handles
               }
@@ -786,7 +786,7 @@ final class RoutesMacroTests: XCTestCase {
             }
 
           static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = _RouteBuilder<RouteView>()
+              let collection = RouteBuilder<RouteView>()
 
                   let docs = collection._route("/docs/*", parent: nil) { context throws(RouteValueError) in
                 RouteView(storage: .docs(splat: try context.params.require("*", String.self)))

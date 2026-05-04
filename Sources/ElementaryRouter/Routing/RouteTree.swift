@@ -5,7 +5,7 @@ public enum RouteMatchError: Error, Equatable, Sendable {
   case missingRequiredParameter(name: String)
 }
 
-public struct _RouteTree<RouteContent: View> {
+public struct RouteTree<RouteContent: View> {
   struct Record {
     let handle: RouteHandle
     let parent: RouteHandle?

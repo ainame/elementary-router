@@ -131,7 +131,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func matcherPrefersStaticRoutesOverDynamicRoutes() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let user = routes._route("/users/:id") { EmptyHTML() }
   let newUser = routes._route("/users/new") { EmptyHTML() }
   let tree = try routes._build()
@@ -144,7 +144,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func matcherSupportsWildcardRoutes() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let files = routes._route("/files/*") { EmptyHTML() }
   let tree = try routes._build()
 
@@ -154,7 +154,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func matcherBuildsNestedMatchStack() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let users = routes._route("/users") { EmptyHTML() }
   let user = routes._route(":id", parent: users) { EmptyHTML() }
   let settings = routes._route("settings", parent: user) { EmptyHTML() }
@@ -169,7 +169,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeBuildsHrefFromParamsAndQuery() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let profile = routes._route("/:lang/profile/:profileId") { EmptyHTML() }
   let tree = try routes._build()
 
@@ -183,7 +183,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeReportsUnknownRouteHandles() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   routes._route("/") { EmptyHTML() }
   let tree = try routes._build()
   let unknown = RouteHandle(id: .init(rawValue: 999))
@@ -210,7 +210,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routerNavigateUpdatesLocationAndMatches() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let home = routes._route("/") { EmptyHTML() }
   let profile = routes._route("/:lang/profile/:profileId") { EmptyHTML() }
   let tree = try routes._build()
@@ -233,7 +233,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routerStoresNestedMatchStack() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let users = routes._route("/users") { EmptyHTML() }
   let user = routes._route(":id", parent: users) { EmptyHTML() }
   let tree = try routes._build()
@@ -244,7 +244,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routerSupportsActiveMatchingOptions() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   let users = routes._route("/users") { EmptyHTML() }
   let user = routes._route(":id", parent: users) { EmptyHTML() }
   let tree = try routes._build()
@@ -268,7 +268,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeResolvesNotFoundThroughRoutePolicy() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   routes._route("/") { EmptyHTML() }
   var notFoundPath = ""
   func captureNotFound(_ context: RouteNotFoundContext) -> EmptyHTML {
@@ -292,7 +292,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeResolvesRouteValueErrorsThroughRoutePolicy() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   func requireProfileID(_ context: RouteContext) throws(RouteValueError) -> EmptyHTML {
     _ = try context.params.require("profileId", Int.self)
     return EmptyHTML()
@@ -324,7 +324,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeRenderReturnsMatchedRouteView() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   var renderedPath = ""
   routes._route("/docs/*") { context in
     renderedPath = context.params.get("*") ?? ""
@@ -338,7 +338,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeEvaluatesNestedRouteBuildersFromParentToLeaf() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   var rendered: [String] = []
   let lang = routes._route("/:lang") { context throws(RouteValueError) in
     rendered.append("layout:\(try context.params.require("lang"))")
@@ -363,7 +363,7 @@ struct MacroLayoutRoutes {
 }
 
 @Test func routeTreeReportsParentRouteValueErrorsBeforeRenderingChildren() throws {
-  let routes = _RouteBuilder<EmptyHTML>()
+  let routes = RouteBuilder<EmptyHTML>()
   var childRendered = false
   let account = routes._route("/accounts/:accountId") { context throws(RouteValueError) in
     _ = try context.params.require("accountId", Int.self)

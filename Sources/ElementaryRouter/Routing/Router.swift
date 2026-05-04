@@ -47,7 +47,7 @@ public final class Router<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, BrowserHistory>
 
-  public init(routes: _RouteTree<RouteContent>) {
+  public init(routes: RouteTree<RouteContent>) {
     self.storage = HistoryRouter(routes: routes, history: BrowserHistory())
   }
 
@@ -124,7 +124,7 @@ public final class HashRouter<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, HashHistory>
 
-  public init(routes: _RouteTree<RouteContent>) {
+  public init(routes: RouteTree<RouteContent>) {
     self.storage = HistoryRouter(routes: routes, history: HashHistory())
   }
 
@@ -200,11 +200,11 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
   private let state: RouterState
-  private let routes: _RouteTree<RouteContent>
+  private let routes: RouteTree<RouteContent>
   private let history: History
   private var subscription: HistorySubscription?
 
-  init(routes: _RouteTree<RouteContent>, history: History) {
+  init(routes: RouteTree<RouteContent>, history: History) {
     self.routes = routes
     self.history = history
     self.state = RouterState(location: history.location, matches: routes._matches(history.location))
@@ -322,7 +322,7 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     return true
   }
 
-  func resolveCurrentRoute() -> _RouteTree<RouteContent>.Resolution {
+  func resolveCurrentRoute() -> RouteTree<RouteContent>.Resolution {
     routes._resolve(location)
   }
 

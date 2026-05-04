@@ -5,7 +5,7 @@ public enum RouteTreeError: Error, Equatable, Sendable {
   case duplicateParameter(path: String, name: String)
 }
 
-public final class _RouteBuilder<RouteContent: View> {
+public final class RouteBuilder<RouteContent: View> {
   private var records: [RecordBuilder] = []
   private var notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   private var errorRenderer: ((RouteErrorContext) -> RouteContent)?
@@ -63,8 +63,8 @@ public final class _RouteBuilder<RouteContent: View> {
     errorRenderer = render
   }
 
-  public func _build() throws(RouteTreeError) -> _RouteTree<RouteContent> {
-    var compiled: [_RouteTree<RouteContent>.Record] = []
+  public func _build() throws(RouteTreeError) -> RouteTree<RouteContent> {
+    var compiled: [RouteTree<RouteContent>.Record] = []
     var seenPaths: [String] = []
     let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })
 
@@ -75,7 +75,7 @@ public final class _RouteBuilder<RouteContent: View> {
       }
       seenPaths.append(pattern.path)
       compiled.append(
-        _RouteTree.Record(
+        RouteTree.Record(
           handle: record.handle,
           parent: record.parent,
           pattern: pattern,
@@ -92,7 +92,7 @@ public final class _RouteBuilder<RouteContent: View> {
       }
     }
 
-    return _RouteTree(
+    return RouteTree(
       records: compiled,
       notFoundRenderer: notFoundRenderer,
       errorRenderer: errorRenderer
