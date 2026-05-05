@@ -348,7 +348,7 @@ private struct RoutePath {
 
 private func validate(route: RouteDeclaration, context: some MacroExpansionContext) {
   let pathParameters = route.pathParameters
-  let pathParameterNames = route.pathStorageParameters.map(\.label)
+  let pathParameterNames = route.pathStorageParameters.map { $0.label }
 
   for name in pathParameters where !pathParameterNames.contains(name) {
     context.diagnose(
@@ -516,7 +516,7 @@ private func wrappedRouteExpression(
   route: RouteDeclaration,
   layouts: [RouteDeclaration]
 ) -> String {
-  let arguments = route.storageParameters.map(\.callArgument).joined(separator: ", ")
+  let arguments = route.storageParameters.map { $0.callArgument }.joined(separator: ", ")
   var expression =
     route.storageParameters.isEmpty
     ? "\(containerName).\(route.name)()"
