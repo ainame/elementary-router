@@ -11,8 +11,8 @@ let package = Package(
     .library(name: "ElementaryRouter", targets: ["ElementaryRouter"])
   ],
   dependencies: [
-    .package(url: "https://github.com/elementary-swift/elementary-ui", from: "0.2.2"),
-    .package(url: "https://github.com/swiftwasm/JavaScriptKit", .upToNextMinor(from: "0.50.0")),
+    .package(url: "https://github.com/elementary-swift/elementary-ui", from: "0.6.0"),
+    .package(url: "https://github.com/swiftwasm/JavaScriptKit", from: "0.50.0"),
     .package(url: "https://github.com/swiftlang/swift-syntax", from: "603.0.0"),
   ],
   targets: [

@@ -5,7 +5,7 @@ let package = Package(
   name: "elementary-router-example",
   platforms: [.macOS(.v15)],
   dependencies: [
-    .package(url: "https://github.com/elementary-swift/elementary-ui", from: "0.2.2"),
+    .package(url: "https://github.com/elementary-swift/elementary-ui", from: "0.6.0"),
     .package(path: "../.."),
   ],
   targets: [
