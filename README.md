@@ -9,6 +9,10 @@ type-erased view layer.
 
 ## Installation
 
+The package requires Swift 6.4 and ElementaryUI 0.9. Native macOS builds require
+macOS 26 or later. The examples use the matching Swift 6.4 Embedded WebAssembly
+SDK for their browser builds.
+
 Add the package to `Package.swift`:
 
 ```swift

@@ -68,7 +68,7 @@ public final class Router<RouteContent: View> {
 
   /// The matched route stack from parent to leaf.
   public var matchedRoutes: [RouteHandle] {
-    storage.matches.map(\.route)
+    storage.matches.map { $0.route }
   }
 
   /// The currently matched leaf route, if any.
@@ -159,7 +159,7 @@ public final class HashRouter<RouteContent: View> {
 
   /// The matched route stack from parent to leaf.
   public var matchedRoutes: [RouteHandle] {
-    storage.matches.map(\.route)
+    storage.matches.map { $0.route }
   }
 
   /// The currently matched leaf route, if any.
@@ -267,7 +267,7 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   }
 
   var matchedRoutes: [RouteHandle] {
-    matches.map(\.route)
+    matches.map { $0.route }
   }
 
   var currentRoute: RouteHandle? {

@@ -198,7 +198,7 @@ public struct RouteTree<RouteContent: View> {
     contexts.reserveCapacity(matches.count)
 
     let query = QueryString.parse(location.queryString)
-    let matchedRoutes = matches.map(\.route)
+    let matchedRoutes = matches.map { $0.route }
 
     for match in matches {
       contexts.append(

@@ -5,14 +5,14 @@ import PackageDescription
 let package = Package(
   name: "elementary-router",
   platforms: [
-    .macOS(.v15)
+    .macOS(.v26)
   ],
   products: [
     .library(name: "ElementaryRouter", targets: ["ElementaryRouter"])
   ],
   dependencies: [
-    .package(url: "https://github.com/elementary-swift/elementary-ui", from: "0.2.2"),
-    .package(url: "https://github.com/swiftwasm/JavaScriptKit", .upToNextMinor(from: "0.50.0")),
+    .package(url: "https://github.com/elementary-swift/elementary-ui", .upToNextMinor(from: "0.9.0")),
+    .package(url: "https://github.com/swiftwasm/JavaScriptKit", from: "0.50.0"),
     .package(url: "https://github.com/swiftlang/swift-syntax", from: "603.0.0"),
   ],
   targets: [
