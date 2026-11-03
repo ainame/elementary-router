@@ -1,7 +1,18 @@
 struct RoutePattern: Equatable, Sendable {
   enum Segment: Equatable, Sendable {
+    /// A static segment, stored percent-decoded.
     case literal(String)
     case parameter(String)
+    case wildcard
+  }
+
+  /// A segment with parameter names erased.
+  ///
+  /// Two patterns with the same shape match exactly the same set of URLs, so the router cannot
+  /// choose between them.
+  enum ShapeSegment: Equatable, Sendable {
+    case literal(String)
+    case parameter
     case wildcard
   }
 
@@ -13,6 +24,16 @@ struct RoutePattern: Equatable, Sendable {
     self.original = path
     self.path = RoutePattern.normalized(path)
     self.segments = try RoutePattern.parseSegments(self.path)
+  }
+
+  var shape: [ShapeSegment] {
+    segments.map { segment -> ShapeSegment in
+      switch segment {
+      case .literal(let value): return .literal(value)
+      case .parameter: return .parameter
+      case .wildcard: return .wildcard
+      }
+    }
   }
 
   func match(_ path: String) -> RouteValues? {
@@ -33,7 +54,9 @@ struct RoutePattern: Equatable, Sendable {
       let segment = segments[patternIndex]
       switch segment {
       case .literal(let value):
-        guard pathIndex < pathSegments.count, pathSegments[pathIndex] == value else {
+        guard pathIndex < pathSegments.count,
+          URLCoding.decode(pathSegments[pathIndex], plusIsSpace: false) == value
+        else {
           return nil
         }
         patternIndex += 1
@@ -54,45 +77,62 @@ struct RoutePattern: Equatable, Sendable {
   }
 
   func buildPath(params: RouteValues) throws(RouteMatchError) -> String {
-    if segments.isEmpty { return "/" }
-
     var result = ""
     for segment in segments {
-      result += "/"
       switch segment {
       case .literal(let value):
-        result += URLCoding.encode(value, spaceAsPlus: false)
+        result += "/" + URLCoding.encode(value, spaceAsPlus: false)
       case .parameter(let name):
-        guard let value = params.get(name) else {
+        // An empty segment would collapse away and the URL would no longer match this route.
+        guard let value = params.get(name), !value.isEmpty else {
           throw RouteMatchError.missingRequiredParameter(name: name)
         }
-        result += URLCoding.encode(value, spaceAsPlus: false)
+        result += "/" + URLCoding.encode(value, spaceAsPlus: false)
       case .wildcard:
         guard let value = params.get("*") else {
           throw RouteMatchError.missingRequiredParameter(name: "*")
         }
-        result += value.split(separator: "/")
-          .map { URLCoding.encode(String($0), spaceAsPlus: false) }
-          .joined(separator: "/")
+        for part in value.split(separator: "/") {
+          result += "/" + URLCoding.encode(String(part), spaceAsPlus: false)
+        }
       }
     }
-    return result
+    return result.isEmpty ? "/" : result
   }
 
-  var specificity: Int {
-    var score = 0
-    for segment in segments {
-      switch segment {
-      case .literal: score += 100
-      case .parameter: score += 10
-      case .wildcard: score -= 1
+  /// Orders two patterns for matching.
+  ///
+  /// Patterns are compared segment by segment from left to right. At the first position where
+  /// they differ, a static segment wins over a parameter, and a parameter wins over a wildcard.
+  /// A pattern that ends where the other continues with a wildcard wins, so `/files` is tried
+  /// before `/files/*`.
+  ///
+  /// Returns a negative value when `self` is tried first, a positive value when `other` is tried
+  /// first, and zero when the segment kinds are identical.
+  func compareRank(to other: RoutePattern) -> Int {
+    var index = 0
+    while index < segments.count || index < other.segments.count {
+      let lhs = RoutePattern.rank(segments, at: index)
+      let rhs = RoutePattern.rank(other.segments, at: index)
+      if lhs != rhs {
+        return lhs > rhs ? -1 : 1
       }
+      index += 1
     }
-    return score
+    return 0
   }
 
   var depth: Int {
     segments.count
+  }
+
+  private static func rank(_ segments: [Segment], at index: Int) -> Int {
+    guard index < segments.count else { return 4 }
+    switch segments[index] {
+    case .literal: return 3
+    case .parameter: return 2
+    case .wildcard: return 1
+    }
   }
 
   private static func normalized(_ path: String) -> String {
@@ -108,8 +148,11 @@ struct RoutePattern: Equatable, Sendable {
     let rawSegments = pathSegments(path)
     var segments: [Segment] = []
 
-    for rawSegment in rawSegments {
+    for (index, rawSegment) in rawSegments.enumerated() {
       if rawSegment == "*" {
+        guard index == rawSegments.count - 1 else {
+          throw RouteTreeError.invalidWildcard(path: path)
+        }
         segments.append(.wildcard)
       } else if rawSegment.first == ":" {
         let name = String(rawSegment.dropFirst())

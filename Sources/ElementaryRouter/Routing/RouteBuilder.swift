@@ -4,8 +4,15 @@ import ElementaryUI
 public enum RouteTreeError: Error, Equatable, Sendable {
   /// Two route declarations produced the same final path pattern.
   case duplicateRoute(path: String)
+  /// Two route declarations match exactly the same URLs, so neither can take precedence.
+  ///
+  /// This happens when patterns differ only by parameter names, such as `/users/:id` and
+  /// `/users/:name`, or only by the percent-encoding of a static segment.
+  case ambiguousRoute(path: String, conflictingPath: String)
   /// A path pattern declared the same parameter name more than once.
   case duplicateParameter(path: String, name: String)
+  /// A path pattern used `*` before its final segment.
+  case invalidWildcard(path: String)
 }
 
 /// Builds a typed route tree programmatically.
@@ -42,7 +49,7 @@ public final class RouteBuilder<RouteContent: View> {
       _ throws(RouteValueError) in
       render()
     }
-    return add(path: path, parent: parent, render: typed)
+    return add(path: path, parent: parent, isLeaf: true, render: typed)
   }
 
   /// Registers a route that renders from a full `RouteContext`.
@@ -61,7 +68,38 @@ public final class RouteBuilder<RouteContent: View> {
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    return add(path: path, parent: parent, render: render)
+    return add(path: path, parent: parent, isLeaf: true, render: render)
+  }
+
+  /// Registers a layout that does not need a `RouteContext`.
+  ///
+  /// A layout only composes its descendants. It joins the match stack when one of its
+  /// descendants matches, but never matches a location on its own; register a route at the same
+  /// path under the layout to make that path navigable.
+  @discardableResult
+  public func _layout(
+    _ path: String,
+    parent: RouteHandle?,
+    @HTMLBuilder render: @escaping () -> RouteContent
+  ) -> RouteHandle {
+    let typed: (RouteContext) throws(RouteValueError) -> RouteContent = {
+      _ throws(RouteValueError) in
+      render()
+    }
+    return add(path: path, parent: parent, isLeaf: false, render: typed)
+  }
+
+  /// Registers a layout that renders from a full `RouteContext`.
+  ///
+  /// A layout only composes its descendants. It joins the match stack when one of its
+  /// descendants matches, but never matches a location on its own.
+  @discardableResult
+  public func _layout(
+    _ path: String,
+    parent: RouteHandle?,
+    @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
+  ) -> RouteHandle {
+    add(path: path, parent: parent, isLeaf: false, render: render)
   }
 
   /// Registers the renderer used when no route matches the current location.
@@ -81,40 +119,48 @@ public final class RouteBuilder<RouteContent: View> {
   /// Compiles the registered route records into a `RouteTree`.
   public func _build() throws(RouteTreeError) -> RouteTree<RouteContent> {
     var compiled: [RouteTree<RouteContent>.Record] = []
-    var seenRecords: [(path: String, record: RecordBuilder)] = []
     let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })
 
     for record in records {
       let pattern = try RoutePattern(resolvedPath(for: record, recordsByID: recordsByID))
-      if seenRecords.contains(where: { seen in
-        seen.path == pattern.path
-          && !isAncestor(record, of: seen.record, recordsByID: recordsByID)
-          && !isAncestor(seen.record, of: record, recordsByID: recordsByID)
-      }) {
-        throw RouteTreeError.duplicateRoute(path: pattern.path)
+      // Routes conflict with routes and layouts with layouts. A layout never matches on its own,
+      // so a layout sharing a path with an unrelated route cannot make matching ambiguous.
+      // Records in the same ancestor chain may share a path: an index route under a layout.
+      for seen in compiled
+      where seen.isLeaf == record.isLeaf && seen.pattern.shape == pattern.shape {
+        guard let seenRecord = recordsByID[seen.handle.id],
+          !isAncestor(record, of: seenRecord, recordsByID: recordsByID),
+          !isAncestor(seenRecord, of: record, recordsByID: recordsByID)
+        else {
+          continue
+        }
+        if seen.pattern.path == pattern.path {
+          throw RouteTreeError.duplicateRoute(path: pattern.path)
+        }
+        throw RouteTreeError.ambiguousRoute(path: pattern.path, conflictingPath: seen.pattern.path)
       }
-      seenRecords.append((pattern.path, record))
       compiled.append(
         RouteTree.Record(
           handle: record.handle,
           parent: record.parent,
           pattern: pattern,
+          isLeaf: record.isLeaf,
           render: record.render
         )
       )
     }
 
-    compiled.sort {
-      if $0.pattern.specificity == $1.pattern.specificity {
-        let leftDepth = depth(of: $0, recordsByID: recordsByID)
-        let rightDepth = depth(of: $1, recordsByID: recordsByID)
-        if leftDepth == rightDepth {
-          return $0.handle.id.rawValue < $1.handle.id.rawValue
-        }
-        return leftDepth > rightDepth
-      } else {
-        return $0.pattern.specificity > $1.pattern.specificity
+    compiled.sort { lhs, rhs in
+      let rank = lhs.pattern.compareRank(to: rhs.pattern)
+      if rank != 0 {
+        return rank < 0
       }
+      let leftDepth = depth(of: lhs, recordsByID: recordsByID)
+      let rightDepth = depth(of: rhs, recordsByID: recordsByID)
+      if leftDepth != rightDepth {
+        return leftDepth > rightDepth
+      }
+      return lhs.handle.id.rawValue < rhs.handle.id.rawValue
     }
 
     return RouteTree(
@@ -128,11 +174,14 @@ public final class RouteBuilder<RouteContent: View> {
   func add(
     path: String,
     parent: RouteHandle?,
+    isLeaf: Bool,
     render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
     let handle = RouteHandle(id: .init(rawValue: nextID))
     nextID += 1
-    records.append(RecordBuilder(handle: handle, parent: parent, path: path, render: render))
+    records.append(
+      RecordBuilder(handle: handle, parent: parent, path: path, isLeaf: isLeaf, render: render)
+    )
     return handle
   }
 
@@ -140,6 +189,7 @@ public final class RouteBuilder<RouteContent: View> {
     let handle: RouteHandle
     let parent: RouteHandle?
     let path: String
+    let isLeaf: Bool
     let render: (RouteContext) throws(RouteValueError) -> RouteContent
   }
 

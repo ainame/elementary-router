@@ -98,6 +98,15 @@ struct DocsRoutes { ... }
 let app = Application(DocsRoutes.RouterView())
 ```
 
+In hash mode, `HashRouter.href(to:)`, generated href helpers, and
+`DocsRoutes.Link` produce fragment hrefs such as `#/docs/guide?tab=api#install`.
+The route path and query are encoded once and placed after `#`. Browsers
+resolve a fragment href against the current document URL, so an app served
+from `/app/?lang=en` links to `/app/?lang=en#/docs/guide?tab=api#install` for
+normal clicks, modified clicks, and copied links, and client navigation keeps
+the same base path and outer query string. Do not add a `<base href>` element
+to hash-mode pages, because it changes how fragment hrefs resolve.
+
 The generated router view creates the concrete router and renders the current route:
 
 ```swift
@@ -214,6 +223,25 @@ A layout route must accept `Outlet<Content>` and return a view that renders that
 outlet. Child routes matched under the layout are composed into the outlet by
 the generated typed `RouteView`.
 
+A layout wraps every route and nested layout whose path starts with the
+layout's path segments. Parameters must use the same names: `/:lang/profile/:id`
+is wrapped by `@Layout("/:lang")`, while `/:slug/about` is not. Nested layouts
+form the match stack from the outermost layout to the leaf route, so with
+`@Layout("/")`, `@Layout("/:lang")`, and `@Route("/:lang/profile/:profileId")`,
+`router.matchedRoutes` for `/ja/profile/42` is
+`[contentView, languageLayout, profile]`.
+
+Layouts are composition nodes, not pages. A layout never matches a location on
+its own, so `/ja` above resolves to `@NotFound` unless an index route is
+declared at the layout's path:
+
+```swift
+@Route("/:lang")
+static func languageHome(lang: String) -> LanguageHomePage {
+  LanguageHomePage(lang: lang)
+}
+```
+
 Treat `@Layout` as route composition, not as an application state boundary.
 The router may recreate layout view values while resolving a new location, so
 state that must survive navigation should live above `AppRoutes.RouterView()`
@@ -268,10 +296,36 @@ an invalid `Int` path parameter.
 
 ## Routing Model
 
-- `Router.matchedRoutes` is the parent-to-leaf match stack.
+- `Router.matchedRoutes` is the parent-to-leaf match stack, including every enclosing layout.
 - `Router.currentRoute` and `Router.currentParams` are leaf conveniences.
 - `Router` uses standard browser path routing.
-- `HashRouter` is available when you explicitly want hash-based routing.
+- `HashRouter` is available when you explicitly want hash-based routing; its hrefs are fragments like `#/users/42`.
+
+### Matching Precedence
+
+Routes are ranked segment by segment, from left to right. At the first segment
+where two routes differ, a static segment beats a parameter, and a parameter
+beats a wildcard. A route that ends where another continues with `*` wins, so
+`/files` is preferred over `/files/*` for `/files`. Registration order does not
+affect matching. For example, `/docs/profile/1` matches `/docs/*` rather than
+`/:lang/profile/:id`.
+
+Static segments are compared after percent-decoding, so `@Route("/café")`
+matches both `/café` and `/caf%C3%A9`. Generated hrefs percent-encode static
+segments and parameter values, and parameter values are decoded when matched.
+
+Routes that match exactly the same URLs are rejected. `@Routes` reports them at
+compile time and `RouteBuilder._build()` throws `RouteTreeError`:
+
+- `duplicateRoute` for the same path declared twice, including trailing-slash variants
+- `ambiguousRoute` for paths that differ only by parameter names, such as
+  `/users/:id` and `/users/:name`, or by percent-encoding, such as `/café` and
+  `/caf%C3%A9`
+- `invalidWildcard` when `*` is not the last path segment
+
+Empty path parameter values throw `RouteMatchError.missingRequiredParameter`
+when an href is built, because the empty segment would collapse and the URL
+would no longer match the route.
 - `@Layout` composes nested route UI through `Outlet<Content>`; keep durable app state above the router view.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
 - `RouteValues` is used for both path params and query params.

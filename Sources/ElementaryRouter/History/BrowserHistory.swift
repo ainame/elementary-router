@@ -28,15 +28,20 @@ final class BrowserHistory: RouterHistory {
   }
 }
 
-final class HashHistory: RouterHistory {
-  private let browser: BrowserHistory
+/// Stores the route location in the fragment of a base history.
+///
+/// The base history's path and query string belong to the hosting document, such as
+/// `/app/?lang=en`, and are preserved when the route location changes. The route location is
+/// written after `#` as-is: it is already a percent-encoded href, so it is not encoded again.
+final class HashHistory<Base: RouterHistory>: RouterHistory {
+  private let base: Base
 
-  init() {
-    self.browser = BrowserHistory()
+  init(base: Base) {
+    self.base = base
   }
 
   var location: RouteLocation {
-    let hash = browser.location.hash
+    let hash = base.location.hash
     if hash.isEmpty {
       return RouteLocation()
     }
@@ -44,21 +49,36 @@ final class HashHistory: RouterHistory {
   }
 
   func push(_ location: RouteLocation) {
-    browser.push(RouteLocation(path: browser.location.path, hash: location.href))
+    base.push(documentLocation(for: location))
   }
 
   func replace(_ location: RouteLocation) {
-    browser.replace(RouteLocation(path: browser.location.path, hash: location.href))
+    base.replace(documentLocation(for: location))
   }
 
   func go(_ delta: Int) {
-    browser.go(delta)
+    base.go(delta)
   }
 
   func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription {
-    browser.listen { update in
+    base.listen { update in
       listener(HistoryUpdate(action: update.action, location: self.location))
     }
+  }
+
+  /// A fragment-only href resolves against the current document URL, which keeps the base path
+  /// and outer query string for normal clicks, modified clicks, and copied links alike.
+  func href(for location: RouteLocation) -> String {
+    "#" + location.href
+  }
+
+  private func documentLocation(for location: RouteLocation) -> RouteLocation {
+    let document = base.location
+    return RouteLocation(
+      path: document.path,
+      queryString: document.queryString,
+      hash: location.href
+    )
   }
 }
 

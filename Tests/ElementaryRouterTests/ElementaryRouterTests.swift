@@ -56,6 +56,81 @@ struct MacroLayoutRoutes {
   }
 }
 
+@View
+struct NestedShell<Content: View> {
+  let outlet: Outlet<Content>
+
+  var body: some View {
+    outlet
+  }
+}
+
+@Routes
+struct NestedLayoutRoutes {
+  // Declared inner-first to check that generated registration does not depend on source order.
+  @Layout("/:lang/teams/:teamID")
+  static func team<Content: View>(
+    lang: String,
+    teamID: Int,
+    outlet: Outlet<Content>
+  ) -> NestedShell<Content> {
+    NestedShell(outlet: outlet)
+  }
+
+  @Layout("/:lang")
+  static func language<Content: View>(lang: String, outlet: Outlet<Content>) -> NestedShell<Content> {
+    NestedShell(outlet: outlet)
+  }
+
+  @Layout("/")
+  static func shell<Content: View>(outlet: Outlet<Content>) -> NestedShell<Content> {
+    NestedShell(outlet: outlet)
+  }
+
+  @Route("/")
+  static func home() -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @Route("/:lang/teams/:teamID")
+  static func teamIndex(lang: String, teamID: Int) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @Route("/:lang/teams/:teamID/members/:memberID")
+  static func member(lang: String, teamID: Int, memberID: Int) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @Route("/docs/*")
+  static func docs(splat: Wildcard) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @NotFound
+  static func notFound(context: RouteNotFoundContext) -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @RouteError
+  static func routeError(context: RouteErrorContext) -> EmptyHTML {
+    EmptyHTML()
+  }
+}
+
+@Routes(mode: .hash)
+struct HashMacroRoutes {
+  @Route("/")
+  static func home() -> EmptyHTML {
+    EmptyHTML()
+  }
+
+  @Route("/users/:id")
+  static func user(id: Int, tab: Query<String> = Query("overview")) -> EmptyHTML {
+    EmptyHTML()
+  }
+}
+
 @Test func routesMacroGeneratesRouteSetAndTypedRouteView() throws {
   let routeSet = try MacroRoutes.routes()
   let router = MemoryRouter(routes: routeSet.tree, history: MemoryHistory(initialPath: "/users/42"))
@@ -82,6 +157,141 @@ struct MacroLayoutRoutes {
   #expect(try routeSet.memberHref(teamID: 7, memberID: 42) == "/teams/7/members/42")
 
   _ = try router.renderCurrentRoute()
+
+  // The layout has no index route, so its own path is not a successful match.
+  #expect(routeSet.tree._matches(RouteLocation(url: "/teams/7")).isEmpty)
+}
+
+@Test func nestedLayoutsFormFullParentToLeafMatchStack() throws {
+  let routes = try NestedLayoutRoutes.routes()
+  let handles = routes.handles
+  let router = MemoryRouter(
+    routes: routes.tree,
+    history: MemoryHistory(initialPath: "/en/teams/7/members/42")
+  )
+
+  #expect(router.matchedRoutes == [handles.shell, handles.language, handles.team, handles.member])
+  #expect(router.currentRoute == handles.member)
+  #expect(router.currentParams?.get("lang") == "en")
+  #expect(router.currentParams?.get("teamID") == "7")
+  #expect(router.currentParams?.get("memberID") == "42")
+  #expect(router.isActive(handles.member))
+  #expect(!router.isActive(handles.language))
+  #expect(router.isActive(handles.language, options: .descendant))
+  #expect(router.isActive(handles.team, options: .init(includeDescendants: true, params: ["teamID": 7])))
+  #expect(try routes.memberHref(lang: "en", teamID: 7, memberID: 42) == "/en/teams/7/members/42")
+
+  if case .matched(let context) = routes.tree._resolve(router.location) {
+    #expect(context.matchedRoutes == router.matchedRoutes)
+  } else {
+    Issue.record("Expected matched resolution")
+  }
+
+  let rendered = try router.renderCurrentRoute()
+  if case .member(let lang, let teamID, let memberID) = rendered.storage {
+    #expect(lang == "en")
+    #expect(teamID == 7)
+    #expect(memberID == 42)
+  } else {
+    Issue.record("Expected the leaf route to render, got \(rendered.storage)")
+  }
+}
+
+@Test func nestedLayoutIndexRouteMatchesLayoutPath() throws {
+  let routes = try NestedLayoutRoutes.routes()
+  let handles = routes.handles
+  let router = MemoryRouter(routes: routes.tree, history: MemoryHistory(initialPath: "/en/teams/7"))
+
+  #expect(router.matchedRoutes == [handles.shell, handles.language, handles.team, handles.teamIndex])
+  #expect(try routes.teamIndexHref(lang: "en", teamID: 7) == "/en/teams/7")
+
+  let rendered = try router.renderCurrentRoute()
+  if case .teamIndex(let lang, let teamID) = rendered.storage {
+    #expect(lang == "en")
+    #expect(teamID == 7)
+  } else {
+    Issue.record("Expected the index route to render, got \(rendered.storage)")
+  }
+}
+
+@Test func nestedLayoutsWithoutMatchingDescendantFallBackToNotFound() throws {
+  let routes = try NestedLayoutRoutes.routes()
+
+  for path in ["/en", "/en/unknown", "/en/teams/7/unknown", "/en/teams/7/members"] {
+    let location = RouteLocation(url: path)
+    #expect(routes.tree._matches(location).isEmpty, "\(path) should not match")
+
+    if case .notFound(let context) = routes.tree._resolve(location) {
+      #expect(context.location.path == path)
+    } else {
+      Issue.record("Expected notFound resolution for \(path)")
+    }
+
+    let rendered = try routes.tree._render(location)
+    if case .notFound(let context) = rendered.storage {
+      #expect(context.location.path == path)
+    } else {
+      Issue.record("Expected notFound rendering for \(path), got \(rendered.storage)")
+    }
+  }
+}
+
+@Test func nestedLayoutSiblingsOnlyIncludeTheirOwnLayouts() throws {
+  let routes = try NestedLayoutRoutes.routes()
+  let handles = routes.handles
+
+  #expect(routes.tree._matches(RouteLocation(url: "/")).map(\.route) == [handles.shell, handles.home])
+
+  // A static first segment outranks the `:lang` layout branch.
+  let docs = routes.tree._matches(RouteLocation(url: "/docs/teams/7"))
+  #expect(docs.map(\.route) == [handles.shell, handles.docs])
+  #expect(docs.last?.params.get("*") == "teams/7")
+
+  let docsRoot = routes.tree._matches(RouteLocation(url: "/docs"))
+  #expect(docsRoot.map(\.route) == [handles.shell, handles.docs])
+  #expect(docsRoot.last?.params.get("*") == "")
+}
+
+@Test func nestedLayoutParameterErrorsUseRouteErrorPolicy() throws {
+  let routes = try NestedLayoutRoutes.routes()
+  let handles = routes.handles
+  let location = RouteLocation(url: "/en/teams/abc/members/42")
+  let expected = RouteValueError.invalid(name: "teamID", rawValue: "abc", expected: "Int")
+
+  if case .error(let context) = routes.tree._resolve(location) {
+    #expect(context.error == expected)
+    #expect(context.routeContext.route == handles.team)
+    #expect(
+      context.routeContext.matchedRoutes == [
+        handles.shell, handles.language, handles.team, handles.member,
+      ]
+    )
+  } else {
+    Issue.record("Expected layout route error")
+  }
+
+  let rendered = try routes.tree._render(location)
+  if case .routeError(let context) = rendered.storage {
+    #expect(context.error == expected)
+  } else {
+    Issue.record("Expected routeError rendering, got \(rendered.storage)")
+  }
+}
+
+@Test func routeBuilderLayoutsOnlyMatchThroughDescendantRoutes() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let account = routes._layout("/accounts/:accountId", parent: nil) { EmptyHTML() }
+  let settings = routes._route("settings", parent: account) { EmptyHTML() }
+  // An unrelated layout may share a path with a route because layouts never match on their own.
+  routes._layout("/admin", parent: nil) { EmptyHTML() }
+  let admin = routes._route("/admin") { EmptyHTML() }
+  let tree = try routes._build()
+
+  #expect(tree._matches(RouteLocation(url: "/accounts/1")).isEmpty)
+  #expect(
+    tree._matches(RouteLocation(url: "/accounts/1/settings")).map(\.route) == [account, settings]
+  )
+  #expect(tree._matches(RouteLocation(url: "/admin")).map(\.route) == [admin])
 }
 
 @Test func routeParametersExtractsStringsAndTypedValues() throws {
@@ -409,4 +619,268 @@ struct MacroLayoutRoutes {
   }
 
   #expect(!childRendered)
+}
+
+@Test func matcherRanksSegmentsFromLeftToRightRegardlessOfRegistrationOrder() throws {
+  let declarations = [
+    "/files", "/files/*", "/files/:name", "/files/new", "/:lang/profile/:id", "/docs/*", "/*",
+  ]
+
+  for ordered in [declarations, Array(declarations.reversed())] {
+    let routes = RouteBuilder<EmptyHTML>()
+    var handles: [String: RouteHandle] = [:]
+    for path in ordered {
+      handles[path] = routes._route(path) { EmptyHTML() }
+    }
+    let tree = try routes._build()
+
+    func leaf(_ url: String) -> RouteHandle? {
+      tree._match(RouteLocation(url: url))?.route
+    }
+
+    #expect(leaf("/files") == handles["/files"])
+    #expect(leaf("/files/new") == handles["/files/new"])
+    #expect(leaf("/files/readme") == handles["/files/:name"])
+    #expect(leaf("/files/a/b") == handles["/files/*"])
+    #expect(leaf("/docs/profile/1") == handles["/docs/*"])
+    #expect(leaf("/ja/profile/1") == handles["/:lang/profile/:id"])
+    #expect(leaf("/ja/other") == handles["/*"])
+    #expect(leaf("/") == handles["/*"])
+  }
+}
+
+private func buildError(
+  _ declare: (RouteBuilder<EmptyHTML>) -> Void
+) -> RouteTreeError? {
+  let routes = RouteBuilder<EmptyHTML>()
+  declare(routes)
+  do throws(RouteTreeError) {
+    _ = try routes._build()
+    return nil
+  } catch {
+    return error
+  }
+}
+
+@Test func routeBuilderRejectsStructurallyIndistinguishableRoutes() {
+  #expect(
+    buildError { routes in
+      routes._route("/users/:id") { EmptyHTML() }
+      routes._route("/users/:name") { EmptyHTML() }
+    } == .ambiguousRoute(path: "/users/:name", conflictingPath: "/users/:id")
+  )
+
+  #expect(
+    buildError { routes in
+      routes._route("/caf%C3%A9") { EmptyHTML() }
+      routes._route("/café") { EmptyHTML() }
+    } == .ambiguousRoute(path: "/café", conflictingPath: "/caf%C3%A9")
+  )
+
+  #expect(
+    buildError { routes in
+      routes._route("/files/*") { EmptyHTML() }
+      routes._route("/files/*/") { EmptyHTML() }
+    } == .duplicateRoute(path: "/files/*")
+  )
+
+  #expect(
+    buildError { routes in
+      let teams = routes._layout("/teams", parent: nil) { EmptyHTML() }
+      routes._route(":id", parent: teams) { EmptyHTML() }
+      routes._route("/teams/:teamID") { EmptyHTML() }
+    } == .ambiguousRoute(path: "/teams/:teamID", conflictingPath: "/teams/:id")
+  )
+
+  #expect(
+    buildError { routes in
+      routes._layout("/:lang", parent: nil) { EmptyHTML() }
+      routes._layout("/:locale", parent: nil) { EmptyHTML() }
+    } == .ambiguousRoute(path: "/:locale", conflictingPath: "/:lang")
+  )
+}
+
+@Test func routeBuilderAcceptsRoutesSeparatedByPrecedence() {
+  #expect(
+    buildError { routes in
+      routes._route("/users") { EmptyHTML() }
+      routes._route("/users/new") { EmptyHTML() }
+      routes._route("/users/:id") { EmptyHTML() }
+      routes._route("/users/*") { EmptyHTML() }
+      routes._route("/:section/new") { EmptyHTML() }
+    } == nil
+  )
+}
+
+@Test func routeBuilderRejectsWildcardsBeforeTheLastSegment() {
+  #expect(
+    buildError { routes in
+      routes._route("/files/*/raw") { EmptyHTML() }
+    } == .invalidWildcard(path: "/files/*/raw")
+  )
+
+  #expect(
+    buildError { routes in
+      let docs = routes._route("/docs/*") { EmptyHTML() }
+      routes._route("edit", parent: docs) { EmptyHTML() }
+    } == .invalidWildcard(path: "/docs/*/edit")
+  )
+}
+
+@Test func matcherComparesPercentDecodedLiteralSegments() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let cafe = routes._route("/café/menu") { EmptyHTML() }
+  let docs = routes._route("/my%20docs/:page") { EmptyHTML() }
+  let tree = try routes._build()
+
+  #expect(tree._match(RouteLocation(url: "/caf%C3%A9/menu"))?.route == cafe)
+  #expect(tree._match(RouteLocation(url: "/caf%c3%a9/menu"))?.route == cafe)
+  #expect(tree._match(RouteLocation(url: "/café/menu"))?.route == cafe)
+  #expect(tree._match(RouteLocation(url: "/cafe/menu")) == nil)
+  #expect(tree._match(RouteLocation(url: "/my%20docs/intro"))?.route == docs)
+  #expect(tree._match(RouteLocation(url: "/my docs/intro"))?.params.get("page") == "intro")
+
+  #expect(try tree._href(to: cafe) == "/caf%C3%A9/menu")
+  #expect(try tree._href(to: docs, params: ["page": "intro"]) == "/my%20docs/intro")
+}
+
+@Test func hrefAndMatchRoundTripEncodedValues() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let item = routes._route("/items/:name") { EmptyHTML() }
+  let files = routes._route("/files/*") { EmptyHTML() }
+  let tree = try routes._build()
+
+  for value in ["a b", "a/b", "100%", "x+y", "what?", "tag#1", "café", "%2F", "a&b=c"] {
+    let href = try tree._href(
+      to: item,
+      params: RouteValues().set("name", value),
+      query: RouteValues().set("q", value),
+      hash: value
+    )
+    let location = RouteLocation(url: href)
+    let match = tree._match(location)
+
+    #expect(match?.route == item, "\(href)")
+    #expect(match?.params.get("name") == value, "\(href)")
+    #expect(QueryString.parse(location.queryString).get("q") == value, "\(href)")
+    #expect(URLCoding.decode(location.hash, plusIsSpace: false) == value, "\(href)")
+  }
+
+  for splat in ["docs/readme", "a b/c%d", "café/menu"] {
+    let href = try tree._href(to: files, params: RouteValues().set("*", splat))
+    #expect(tree._match(RouteLocation(url: href))?.params.get("*") == splat, "\(href)")
+  }
+
+  #expect(try tree._href(to: files, params: ["*": ""]) == "/files")
+  #expect(tree._match(RouteLocation(url: "/files"))?.params.get("*") == "")
+
+  #expect(throws: RouteMatchError.missingRequiredParameter(name: "name")) {
+    try tree._href(to: item, params: ["name": ""])
+  }
+}
+
+@Test func activeHashMatchingComparesDecodedFragments() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let section = routes._route("/guide") { EmptyHTML() }
+  let tree = try routes._build()
+  let router = MemoryRouter(routes: tree, history: MemoryHistory(initialPath: "/"))
+
+  try router.navigate(to: section, hash: "getting started")
+
+  #expect(router.location.hash == "getting%20started")
+  #expect(router.isActive(section, options: .init(hash: "getting started")))
+  #expect(!router.isActive(section, options: .init(hash: "getting")))
+}
+
+@Test func hashRouterHrefsAreFragmentsThatResolveToPushedURLs() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let document = MemoryHistory(initialPath: "/app/?lang=en")
+  let router = HistoryRouter(routes: tree, history: HashHistory(base: document))
+
+  #expect(router.currentRoute == home)
+
+  let href = try router.href(to: user, params: ["id": 42], query: ["tab": "posts"], hash: "bio")
+  #expect(href == "#/users/42?tab=posts#bio")
+
+  try router.navigate(to: user, params: ["id": 42], query: ["tab": "posts"], hash: "bio")
+
+  // A fragment-only href resolves against the document's base path and query string, so normal
+  // clicks, modified clicks, and copied links all reach the URL that client navigation pushes.
+  #expect(document.location.href == "/app/?lang=en" + href)
+  #expect(router.location.href == "/users/42?tab=posts#bio")
+  #expect(router.currentRoute == user)
+  #expect(router.currentParams?.get("id") == "42")
+  #expect(router.isActive(user, options: .init(query: ["tab": "posts"], hash: "bio")))
+
+  router.back()
+  #expect(document.location.href == "/app/?lang=en")
+  #expect(router.currentRoute == home)
+}
+
+@Test func hashRouterHrefsAreNotDoubleEncoded() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let document = MemoryHistory(initialPath: "/")
+  let router = HistoryRouter(routes: tree, history: HashHistory(base: document))
+  let params = RouteValues().set("id", "a b/c")
+
+  let href = try router.href(to: user, params: params, query: ["q": "x y"], hash: "x y")
+  #expect(href == "#/users/a%20b%2Fc?q=x+y#x%20y")
+  #expect(!href.contains("%25"))
+
+  try router.navigate(to: user, params: params, query: ["q": "x y"], hash: "x y")
+  #expect(document.location.href == "/" + href)
+  #expect(router.currentParams?.get("id") == "a b/c")
+  #expect(QueryString.parse(router.location.queryString).get("q") == "x y")
+}
+
+@Test func hashRouterReadsDeepLinksFromTheDocumentFragment() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let router = HistoryRouter(
+    routes: tree,
+    history: HashHistory(base: MemoryHistory(initialPath: "/app/?lang=en#/users/7?tab=posts#bio"))
+  )
+
+  #expect(router.currentRoute == user)
+  #expect(router.currentParams?.get("id") == "7")
+  #expect(router.location.queryString == "tab=posts")
+  #expect(router.location.hash == "bio")
+}
+
+@Test func pathRouterHrefsStayAbsolutePaths() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let router = MemoryRouter(routes: tree, history: MemoryHistory(initialPath: "/"))
+
+  #expect(
+    try router.href(to: user, params: ["id": 42], query: ["tab": "posts"], hash: "bio")
+      == "/users/42?tab=posts#bio"
+  )
+}
+
+@Test func generatedHashRouteSetHrefsMatchHashRouterHrefs() throws {
+  let routeSet = try HashMacroRoutes.routes()
+  let router = HistoryRouter(
+    routes: routeSet.tree,
+    history: HashHistory(base: MemoryHistory(initialPath: "/app/"))
+  )
+
+  #expect(try routeSet.homeHref() == "#/")
+  #expect(try routeSet.userHref(id: 42, tab: "posts", hash: "bio") == "#/users/42?tab=posts#bio")
+  #expect(
+    try routeSet.userHref(id: 42, tab: "posts", hash: "bio")
+      == router.href(
+        to: routeSet.handles.user,
+        params: ["id": 42],
+        query: ["tab": "posts"],
+        hash: "bio"
+      )
+  )
 }

@@ -48,8 +48,11 @@ public macro Route(_ path: String) =
 
 /// Declares a layout route on a member inside a `@Routes` type.
 ///
-/// Layouts participate in the route match stack and are rendered from parent to child. Use
-/// `Outlet` inside the layout body to place the child route content.
+/// A layout wraps every `@Route` and nested `@Layout` whose path starts with the layout's path
+/// segments, using the same parameter names. Layouts join the parent-to-leaf match stack when a
+/// wrapped route matches, but never match a location on their own: declare a `@Route` with the
+/// same path to make the layout's own path navigable. Use `Outlet` inside the layout body to
+/// place the child route content.
 @attached(peer, names: arbitrary)
 public macro Layout(_ path: String) =
   #externalMacro(module: "ElementaryRouterMacros", type: "LayoutMacro")

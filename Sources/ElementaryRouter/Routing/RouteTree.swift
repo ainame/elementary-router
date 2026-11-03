@@ -4,7 +4,7 @@ import ElementaryUI
 public enum RouteMatchError: Error, Equatable, Sendable {
   /// The supplied route handle was not registered in this tree.
   case unknownRoute
-  /// A required path parameter was missing while building the target URL.
+  /// A required path parameter was missing, or empty, while building the target URL.
   case missingRequiredParameter(name: String)
 }
 
@@ -17,6 +17,8 @@ public struct RouteTree<RouteContent: View> {
     let handle: RouteHandle
     let parent: RouteHandle?
     let pattern: RoutePattern
+    /// `false` for layouts, which join a match stack but never match a location on their own.
+    let isLeaf: Bool
     let render: (RouteContext) throws(RouteValueError) -> RouteContent
   }
 
@@ -60,6 +62,22 @@ public struct RouteTree<RouteContent: View> {
       href += "#" + URLCoding.encode(trimmedHash, spaceAsPlus: false)
     }
     return href
+  }
+
+  /// Builds a hash-mode href, such as `#/users/42?tab=posts`, for a route handle.
+  ///
+  /// The route path, query, and hash are encoded exactly as `_href` encodes them and then placed
+  /// after a single `#`, without encoding them a second time. A fragment-only href resolves
+  /// against the current document URL, so the app's base path and outer query string are kept
+  /// for normal clicks, modified clicks, and copied links. A document `<base href>` element
+  /// changes that resolution, so hash-mode apps should not declare one.
+  public func _hashHref(
+    to route: RouteHandle,
+    params: RouteValues = RouteValues(),
+    query: RouteValues = RouteValues(),
+    hash: String = ""
+  ) throws(RouteMatchError) -> String {
+    try "#" + _href(to: route, params: params, query: query, hash: hash)
   }
 
   func _resolve(_ location: RouteLocation) -> Resolution {
@@ -147,7 +165,7 @@ public struct RouteTree<RouteContent: View> {
   }
 
   private func findLeafRecord(for location: RouteLocation) -> Record? {
-    for record in records {
+    for record in records where record.isLeaf {
       if record.pattern.match(location.path) != nil {
         return record
       }

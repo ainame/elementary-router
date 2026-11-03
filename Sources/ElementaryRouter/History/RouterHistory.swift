@@ -4,6 +4,14 @@ protocol RouterHistory: AnyObject {
   func replace(_ location: RouteLocation)
   func go(_ delta: Int)
   func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription
+  /// Returns the href an anchor should use to reach `location` through this history.
+  func href(for location: RouteLocation) -> String
+}
+
+extension RouterHistory {
+  func href(for location: RouteLocation) -> String {
+    location.href
+  }
 }
 
 enum HistoryAction: Equatable, Sendable {

@@ -29,8 +29,6 @@ public enum RoutesMacro: MemberMacro {
     var layouts: [RouteDeclaration] = []
     var notFound: FunctionDeclSyntax?
     var routeError: FunctionDeclSyntax?
-    var seenRoutePaths: [String] = []
-    var seenLayoutPaths: [String] = []
 
     for member in declaration.memberBlock.members {
       guard let function = member.decl.as(FunctionDeclSyntax.self) else {
@@ -51,16 +49,7 @@ public enum RoutesMacro: MemberMacro {
 
         let route = RouteDeclaration(function: function, path: path)
         validate(route: route, context: context)
-
-        if seenRoutePaths.contains(route.normalizedPath) {
-          context.diagnose(
-            .init(
-              node: Syntax(function),
-              message: RoutesDiagnostic.duplicateRoute(path: route.normalizedPath)
-            )
-          )
-        }
-        seenRoutePaths.append(route.normalizedPath)
+        validateUnique(route, against: routes, context: context)
         routes.append(route)
       }
 
@@ -84,15 +73,7 @@ public enum RoutesMacro: MemberMacro {
           )
         }
 
-        if seenLayoutPaths.contains(layout.normalizedPath) {
-          context.diagnose(
-            .init(
-              node: Syntax(function),
-              message: RoutesDiagnostic.duplicateRoute(path: layout.normalizedPath)
-            )
-          )
-        }
-        seenLayoutPaths.append(layout.normalizedPath)
+        validateUnique(layout, against: layouts, context: context)
         layouts.append(layout)
       }
 
@@ -344,6 +325,80 @@ private struct RoutePath {
     }
     return result
   }
+
+  /// The segments with parameter names erased, matching the runtime `RoutePattern.shape`.
+  ///
+  /// Two paths with the same shape match exactly the same URLs.
+  var shape: [RouteSegmentShape] {
+    segments.map { segment -> RouteSegmentShape in
+      if segment == "*" {
+        return .wildcard
+      }
+      if segment.first == ":" {
+        return .parameter
+      }
+      return .literal(percentDecoded(segment))
+    }
+  }
+
+  /// Returns `true` when `prefix` names the leading segments of this path.
+  ///
+  /// Parameters must use the same names so a layout and its children read the same values.
+  /// Static segments compare percent-decoded, as the runtime matcher does.
+  func hasSegmentPrefix(_ prefix: RoutePath) -> Bool {
+    let own = segments
+    let other = prefix.segments
+    guard other.count <= own.count else {
+      return false
+    }
+    for (lhs, rhs) in zip(own, other) where !segmentsMatch(lhs, rhs) {
+      return false
+    }
+    return true
+  }
+}
+
+private enum RouteSegmentShape: Equatable {
+  case literal(String)
+  case parameter
+  case wildcard
+}
+
+private func segmentsMatch(_ lhs: String, _ rhs: String) -> Bool {
+  if lhs == "*" || rhs == "*" || lhs.first == ":" || rhs.first == ":" {
+    return lhs == rhs
+  }
+  return percentDecoded(lhs) == percentDecoded(rhs)
+}
+
+private func percentDecoded(_ value: String) -> String {
+  let input = Array(value.utf8)
+  var bytes: [UInt8] = []
+  var index = 0
+
+  while index < input.count {
+    if input[index] == UInt8(ascii: "%"), index + 2 < input.count,
+      let high = hexValue(input[index + 1]),
+      let low = hexValue(input[index + 2])
+    {
+      bytes.append(high * 16 + low)
+      index += 3
+    } else {
+      bytes.append(input[index])
+      index += 1
+    }
+  }
+
+  return String(decoding: bytes, as: UTF8.self)
+}
+
+private func hexValue(_ byte: UInt8) -> UInt8? {
+  switch byte {
+  case UInt8(ascii: "0")...UInt8(ascii: "9"): return byte - UInt8(ascii: "0")
+  case UInt8(ascii: "A")...UInt8(ascii: "F"): return byte - UInt8(ascii: "A") + 10
+  case UInt8(ascii: "a")...UInt8(ascii: "f"): return byte - UInt8(ascii: "a") + 10
+  default: return nil
+  }
 }
 
 private func validate(route: RouteDeclaration, context: some MacroExpansionContext) {
@@ -379,18 +434,59 @@ private func validate(route: RouteDeclaration, context: some MacroExpansionConte
       .init(node: Syntax(route.function), message: RoutesDiagnostic.unexpectedWildcardParameter)
     )
   }
+
+  let segments = RoutePath(route.path).segments
+  if let wildcardIndex = segments.firstIndex(of: "*"), wildcardIndex != segments.count - 1 {
+    context.diagnose(
+      .init(node: Syntax(route.function), message: RoutesDiagnostic.wildcardMustBeLast)
+    )
+  }
 }
 
+/// Rejects a declaration that matches exactly the same URLs as an earlier one of the same kind.
+private func validateUnique(
+  _ route: RouteDeclaration,
+  against existing: [RouteDeclaration],
+  context: some MacroExpansionContext
+) {
+  let shape = RoutePath(route.path).shape
+  guard let conflict = existing.first(where: { RoutePath($0.path).shape == shape }) else {
+    return
+  }
+
+  let message =
+    conflict.normalizedPath == route.normalizedPath
+    ? RoutesDiagnostic.duplicateRoute(path: route.normalizedPath)
+    : RoutesDiagnostic.ambiguousRoute(
+      path: route.normalizedPath,
+      conflictingPath: conflict.normalizedPath
+    )
+  context.diagnose(.init(node: Syntax(route.function), message: message))
+}
+
+/// Returns every layout that wraps `route`, from outermost to innermost.
+///
+/// A layout wraps a route when the layout path names the route's leading segments, including a
+/// layout declared at exactly the route's path.
 private func matchingLayouts(for route: RouteDeclaration, layouts: [RouteDeclaration])
   -> [RouteDeclaration]
 {
-  layouts
-    .filter { layout in
-      route.normalizedPath == layout.normalizedPath
-        || layout.normalizedPath == "/"
-        || route.normalizedPath.hasPrefix(layout.normalizedPath + "/")
-    }
+  let path = RoutePath(route.path)
+  return
+    layouts
+    .filter { path.hasSegmentPrefix(RoutePath($0.path)) }
     .sorted { $0.depth < $1.depth }
+}
+
+/// Returns the innermost layout that wraps `layout`, which becomes its parent in the route tree.
+private func enclosingLayout(for layout: RouteDeclaration, layouts: [RouteDeclaration])
+  -> RouteDeclaration?
+{
+  let path = RoutePath(layout.path)
+  return
+    layouts
+    .filter { $0.depth < layout.depth && path.hasSegmentPrefix(RoutePath($0.path)) }
+    .max { $0.depth < $1.depth }
 }
 
 private func relativePath(for route: RouteDeclaration, under layout: RouteDeclaration?) -> String {
@@ -398,16 +494,8 @@ private func relativePath(for route: RouteDeclaration, under layout: RouteDeclar
     return route.path
   }
 
-  if route.normalizedPath == layout.normalizedPath {
-    return "/"
-  }
-
-  var relative = route.normalizedPath
-  relative.removeFirst(layout.normalizedPath.count)
-  if relative.first == "/" {
-    relative.removeFirst()
-  }
-  return relative.isEmpty ? "/" : relative
+  let remaining = RoutePath(route.path).segments.dropFirst(layout.depth)
+  return remaining.isEmpty ? "/" : remaining.joined(separator: "/")
 }
 
 private func routeViewDeclaration(
@@ -576,8 +664,10 @@ private func routeSetDeclaration(
   routes: [RouteDeclaration],
   layouts: [RouteDeclaration]
 ) -> String {
-  let hrefs = (layouts + routes).map { hrefFunctionDeclaration(access: access, route: $0) }
-    .joined(separator: "\n\n")
+  let hrefs = (layouts + routes).map {
+    hrefFunctionDeclaration(access: access, mode: mode, route: $0)
+  }
+  .joined(separator: "\n\n")
   let routerType = routerType(mode: mode, routeViewType: "RouteView")
   let routerInitializer = routerInitializer(mode: mode, treeName: "tree")
 
@@ -791,11 +881,22 @@ private func routesFunctionDeclaration(
   notFound: FunctionDeclSyntax?,
   routeError: FunctionDeclSyntax?
 ) -> String {
-  let layoutRegistrations = layouts.map { layout in
-    routeRegistration(layout, parent: nil)
-  }
+  // Register outer layouts first so each nested layout can reference its parent handle.
+  let layoutRegistrations = layouts.enumerated()
+    .sorted { ($0.element.depth, $0.offset) < ($1.element.depth, $1.offset) }
+    .map { entry in
+      routeRegistration(
+        entry.element,
+        method: "_layout",
+        parent: enclosingLayout(for: entry.element, layouts: layouts)
+      )
+    }
   let registrations = routes.map { route in
-    routeRegistration(route, parent: matchingLayouts(for: route, layouts: layouts).last)
+    routeRegistration(
+      route,
+      method: "_route",
+      parent: matchingLayouts(for: route, layouts: layouts).last
+    )
   }
 
   let notFoundRegistration = notFound.map { function in
@@ -881,7 +982,11 @@ private func parseRoutesMode(
   }
 }
 
-private func routeRegistration(_ route: RouteDeclaration, parent: RouteDeclaration?) -> String {
+private func routeRegistration(
+  _ route: RouteDeclaration,
+  method: String,
+  parent: RouteDeclaration?
+) -> String {
   let storageArguments = route.storageParameters.map { parameter in
     switch parameter.kind {
     case .context:
@@ -906,14 +1011,14 @@ private func routeRegistration(_ route: RouteDeclaration, parent: RouteDeclarati
 
   if route.storageParameters.isEmpty {
     return """
-          let \(route.name) = collection._route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) {
+          let \(route.name) = collection.\(method)("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) {
             RouteView(storage: .\(route.name))
           }
       """
   }
 
   return """
-        let \(route.name) = collection._route("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) { context throws(RouteValueError) in
+        let \(route.name) = collection.\(method)("\(relativePath(for: route, under: parent))", parent: \(registrationParent(parent: parent))) { context throws(RouteValueError) in
           RouteView(storage: .\(route.name)(\(storageArguments)))
         }
     """
@@ -926,7 +1031,11 @@ private func registrationParent(parent: RouteDeclaration?) -> String {
   return parent.name
 }
 
-private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) -> String {
+private func hrefFunctionDeclaration(
+  access: String,
+  mode: RoutesMode,
+  route: RouteDeclaration
+) -> String {
   let pathParameters = route.storageParameters.filter {
     $0.kind == .path || $0.kind == .wildcard
   }
@@ -976,11 +1085,20 @@ private func hrefFunctionDeclaration(access: String, route: RouteDeclaration) ->
       """
   }
 
+  // Hash-mode helpers return the same fragment hrefs as `HashRouter.href(to:)`.
+  let hrefMethod: String
+  switch mode {
+  case .path:
+    hrefMethod = "_href"
+  case .hash:
+    hrefMethod = "_hashHref"
+  }
+
   return """
       \(access)func \(route.name)Href(\(signatureParameters)) throws(RouteMatchError) -> String {
         \(paramsBuilder)
         \(queryBuilder)
-        return try tree._href(to: handles.\(route.name), params: params, query: query, hash: hash)
+        return try tree.\(hrefMethod)(to: handles.\(route.name), params: params, query: query, hash: hash)
       }
     """
 }
@@ -1050,6 +1168,8 @@ private enum RoutesDiagnostic: DiagnosticMessage {
   case unexpectedWildcardParameter
   case layoutRequiresOutlet
   case duplicateRoute(path: String)
+  case ambiguousRoute(path: String, conflictingPath: String)
+  case wildcardMustBeLast
   case duplicateNotFound
   case duplicateRouteError
   case unsupportedRoutesMode
@@ -1072,6 +1192,10 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "`@Layout` functions must declare an outlet parameter."
     case .duplicateRoute(let path):
       "Duplicate route path `\(path)`."
+    case .ambiguousRoute(let path, let conflictingPath):
+      "Route path `\(path)` matches the same URLs as `\(conflictingPath)`."
+    case .wildcardMustBeLast:
+      "Wildcard `*` must be the last path segment."
     case .duplicateNotFound:
       "`@Routes` can only declare one `@NotFound` function."
     case .duplicateRouteError:

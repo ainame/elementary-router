@@ -145,11 +145,11 @@ public final class Router<RouteContent: View> {
 public final class HashRouter<RouteContent: View> {
   public typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
-  private let storage: HistoryRouter<RouteContent, HashHistory>
+  private let storage: HistoryRouter<RouteContent, HashHistory<BrowserHistory>>
 
   /// Creates a hash router for the given compiled route tree.
   public init(routes: RouteTree<RouteContent>) {
-    self.storage = HistoryRouter(routes: routes, history: HashHistory())
+    self.storage = HistoryRouter(routes: routes, history: HashHistory(base: BrowserHistory()))
   }
 
   /// The current browser location.
@@ -172,7 +172,11 @@ public final class HashRouter<RouteContent: View> {
     storage.currentMatch?.params
   }
 
-  /// Builds an href for a registered route handle.
+  /// Builds a fragment href, such as `#/users/42?tab=posts`, for a registered route handle.
+  ///
+  /// The href resolves against the current document URL, so the app's base path and outer query
+  /// string are preserved by normal clicks, modified clicks, and copied links. Do not declare a
+  /// document `<base href>` element in hash-mode apps, because it changes that resolution.
   public func href(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -193,7 +197,7 @@ public final class HashRouter<RouteContent: View> {
     try storage.navigate(to: route, params: params, query: query, hash: hash, replace: replace)
   }
 
-  /// Navigates directly to a raw browser location.
+  /// Navigates directly to a route location stored in the URL hash fragment.
   public func navigate(to location: RouteLocation, replace: Bool = false) {
     storage.navigate(to: location, replace: replace)
   }
@@ -284,7 +288,8 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
-    try routes._href(to: route, params: params, query: query, hash: hash)
+    let path = try routes._href(to: route, params: params, query: query, hash: hash)
+    return history.href(for: RouteLocation(url: path))
   }
 
   func navigate(
@@ -349,8 +354,9 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
       return false
     }
 
+    // `href(to:)` percent-encodes the hash it is given, so compare with the decoded fragment.
     if let expectedHash = options.hash,
-      RouteLocation.trimmedHash(expectedHash) != location.hash
+      RouteLocation.trimmedHash(expectedHash) != URLCoding.decode(location.hash, plusIsSpace: false)
     {
       return false
     }
