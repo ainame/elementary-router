@@ -392,14 +392,173 @@ struct HashMacroRoutes {
   #expect(href == "/ja/profile/42?tab=posts")
 }
 
-@Test func routeTreeReportsUnknownRouteHandles() throws {
+@Test func routeTreeReportsRoutesRegisteredAfterBuilding() throws {
   let routes = RouteBuilder<EmptyHTML>()
   routes._route("/") { EmptyHTML() }
   let tree = try routes._build()
-  let unknown = RouteHandle(id: .init(rawValue: 999))
+  let late = routes._route("/late") { EmptyHTML() }
 
   #expect(throws: RouteMatchError.unknownRoute) {
-    try tree._href(to: unknown)
+    try tree._href(to: late)
+  }
+  #expect(try routes._build()._href(to: late) == "/late")
+}
+
+@Test func handlesFromUnrelatedTreesNeverAlias() throws {
+  let first = RouteBuilder<EmptyHTML>()
+  let firstHome = first._route("/") { EmptyHTML() }
+  let firstUser = first._route("/users/:id") { EmptyHTML() }
+  let firstTree = try first._build()
+
+  let second = RouteBuilder<EmptyHTML>()
+  let secondHome = second._route("/") { EmptyHTML() }
+  let secondUser = second._route("/users/:id") { EmptyHTML() }
+  let secondTree = try second._build()
+
+  // Both builders register the same paths in the same order, so only tree identity differs.
+  #expect(firstHome != secondHome)
+  #expect(firstUser != secondUser)
+  #expect(Set([firstHome, firstUser, secondHome, secondUser]).count == 4)
+  #expect(!firstTree._isSameTree(as: secondTree))
+
+  #expect(throws: RouteMatchError.foreignRoute) {
+    try secondTree._href(to: firstUser, params: ["id": 42])
+  }
+  #expect(try secondTree._href(to: secondUser, params: ["id": 42]) == "/users/42")
+  #expect(secondTree._match(RouteLocation(url: "/users/42"))?.route == secondUser)
+}
+
+@Test func treesBuiltAtDifferentTimesFromOneBuilderAreDistinctSnapshots() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let early = try routes._build()
+  let late = routes._route("/late") { EmptyHTML() }
+  let complete = try routes._build()
+  let copy = early
+
+  // Copies of one build are the same tree; separate builds are not, even from one builder.
+  #expect(copy._isSameTree(as: early))
+  #expect(!early._isSameTree(as: complete))
+
+  // Handles still belong to the builder, so the later tree resolves the earlier handles.
+  #expect(try complete._href(to: home) == "/")
+  #expect(try complete._href(to: late) == "/late")
+  #expect(throws: RouteMatchError.unknownRoute) {
+    try early._href(to: late)
+  }
+
+  let router = Router(routes: early, history: BrowserHistory(history: MemoryHistory()))
+  let hashRouter = HashRouter(routes: complete, history: BrowserHistory(history: MemoryHistory()))
+  #expect(router._uses(early))
+  #expect(router._uses(copy))
+  #expect(!router._uses(complete))
+  #expect(hashRouter._uses(complete))
+  #expect(!hashRouter._uses(early))
+  #expect(throws: RouteMatchError.unknownRoute) {
+    try router.navigate(to: late)
+  }
+}
+
+@Test func routersRejectForeignHandlesForHrefNavigationAndActiveMatching() throws {
+  let foreign = try MacroRoutes.routes()
+  let routes = try MacroRoutes.routes()
+  let history = MemoryHistory(initialPath: "/users/42")
+  let router = MemoryRouter(routes: routes.tree, history: history)
+  var updates: [HistoryUpdate] = []
+  let subscription = history.listen { updates.append($0) }
+
+  #expect(foreign.handles.user != routes.handles.user)
+  #expect(router.isActive(routes.handles.user))
+  #expect(!router.isActive(foreign.handles.user))
+  #expect(!router.isActive(foreign.handles.user, options: .descendant))
+
+  #expect(throws: RouteMatchError.foreignRoute) {
+    try router.href(to: foreign.handles.user, params: ["id": 7])
+  }
+  #expect(throws: RouteMatchError.foreignRoute) {
+    try router.navigate(to: foreign.handles.home)
+  }
+  #expect(throws: RouteMatchError.foreignRoute) {
+    try router.replace(to: foreign.handles.home)
+  }
+
+  #expect(updates.isEmpty)
+  #expect(router.location.href == "/users/42")
+  #expect(router.currentRoute == routes.handles.user)
+  subscription.cancel()
+}
+
+@Test func independentlyBuiltRouteSetsKeepTheirOwnHandles() throws {
+  let first = try MacroRoutes.routes()
+  let second = try MacroRoutes.routes()
+
+  #expect(first.handles.home != second.handles.home)
+  #expect(!first.tree._isSameTree(as: second.tree))
+  #expect(try first.userHref(id: 42) == "/users/42")
+  #expect(try second.userHref(id: 42) == "/users/42")
+
+  let router = second.router()
+  #expect(router._uses(second.tree))
+  #expect(!router._uses(first.tree))
+  #expect(try router.href(to: second.handles.user, params: ["id": 42]) == "/users/42")
+  #expect(throws: RouteMatchError.foreignRoute) {
+    try router.href(to: first.handles.user, params: ["id": 42])
+  }
+}
+
+@Test func routeBuilderRejectsParentsFromAnotherBuilder() {
+  let other = RouteBuilder<EmptyHTML>()
+  let foreignLayout = other._layout("/accounts/:accountId", parent: nil) { EmptyHTML() }
+  let foreignRoute = other._route("/teams") { EmptyHTML() }
+
+  #expect(
+    buildError { routes in
+      routes._route("settings", parent: foreignLayout) { EmptyHTML() }
+    } == .foreignParent(path: "settings")
+  )
+
+  #expect(
+    buildError { routes in
+      let local = routes._layout("/admin", parent: nil) { EmptyHTML() }
+      routes._route("users", parent: local) { EmptyHTML() }
+      routes._layout(":teamID", parent: foreignRoute) { EmptyHTML() }
+    } == .foreignParent(path: ":teamID")
+  )
+}
+
+@Test func generatedProviderAndRouterViewShareOneRouteSetWithTheirRouter() throws {
+  let routes = try MacroRoutes.routes()
+  let router = routes.router()
+
+  let provider = MacroRoutes.Provider(routes, router: router) { EmptyHTML() }
+  #expect(provider.router === router)
+  #expect(provider.routes.handles.user == routes.handles.user)
+  #expect(provider.router._uses(provider.routes.tree))
+
+  let routerView = MacroRoutes.RouterView(routes, router: router)
+  #expect(routerView.router === router)
+  #expect(routerView.routes.handles.user == routes.handles.user)
+
+  let standalone = MacroRoutes.RouterView()
+  #expect(standalone.router._uses(standalone.routes.tree))
+  #expect(standalone.routes.handles.user != routes.handles.user)
+  #expect(
+    try standalone.router.href(to: standalone.routes.handles.user, params: ["id": 7]) == "/users/7"
+  )
+
+  let hashRoutes = try HashMacroRoutes.routes()
+  let hashProvider = HashMacroRoutes.Provider(hashRoutes, router: hashRoutes.router()) {
+    EmptyHTML()
+  }
+  #expect(hashProvider.router._uses(hashRoutes.tree))
+  #expect(try hashProvider.router.href(to: hashRoutes.handles.user, params: ["id": 7]) == "#/users/7")
+}
+
+@Test func generatedProviderRejectsRouterFromAnotherRouteSet() async {
+  await #expect(processExitsWith: .failure) {
+    let routes = try MacroRoutes.routes()
+    let other = try MacroRoutes.routes()
+    _ = MacroRoutes.Provider(routes, router: other.router()) { EmptyHTML() }
   }
 }
 
@@ -417,6 +576,378 @@ struct HashMacroRoutes {
   #expect(history.location.href == "/a")
   #expect(updates.map(\.action) == [.push, .push, .replace, .pop])
   #expect(updates.map(\.location.href) == ["/a", "/b", "/c", "/a"])
+}
+
+@Test func historySubscriptionCancellationIsIdempotentAndIndependent() {
+  let history = MemoryHistory(initialPath: "/")
+  var first: [String] = []
+  var second: [String] = []
+  let firstSubscription = history.listen { first.append($0.location.href) }
+  let secondSubscription = history.listen { second.append($0.location.href) }
+  #expect(history.listenerCount == 2)
+
+  history.push(RouteLocation(url: "/a"))
+  firstSubscription.cancel()
+  firstSubscription.cancel()
+  #expect(firstSubscription.isCancelled)
+  #expect(!secondSubscription.isCancelled)
+  #expect(history.listenerCount == 1)
+
+  history.push(RouteLocation(url: "/b"))
+  #expect(first == ["/a"])
+  #expect(second == ["/a", "/b"])
+
+  secondSubscription.cancel()
+  #expect(history.listenerCount == 0)
+  history.push(RouteLocation(url: "/c"))
+  #expect(second == ["/a", "/b"])
+}
+
+@Test func releasingHistorySubscriptionRemovesItsListener() {
+  let history = MemoryHistory(initialPath: "/")
+  var received = 0
+
+  func listenBriefly() {
+    let subscription = history.listen { _ in received += 1 }
+    #expect(history.listenerCount == 1)
+    history.push(RouteLocation(url: "/a"))
+    withExtendedLifetime(subscription) {}
+  }
+
+  listenBriefly()
+  #expect(history.listenerCount == 0)
+  history.push(RouteLocation(url: "/b"))
+  #expect(received == 1)
+}
+
+@Test func listenerCancelledDuringDeliveryIsSkipped() {
+  let history = MemoryHistory(initialPath: "/")
+  var laterSubscription: HistorySubscription?
+  var earlierSeen: [String] = []
+  var laterCalls = 0
+  let earlier = history.listen { update in
+    earlierSeen.append(update.location.href)
+    guard update.location.path == "/a" else { return }
+    laterSubscription?.cancel()
+    history.push(RouteLocation(url: "/b"))
+  }
+  laterSubscription = history.listen { _ in laterCalls += 1 }
+
+  history.push(RouteLocation(url: "/a"))
+
+  // The cancelled listener misses both the current update and the one queued during delivery.
+  #expect(laterCalls == 0)
+  #expect(earlierSeen == ["/a", "/b"])
+  #expect(history.listenerCount == 1)
+  earlier.cancel()
+}
+
+@Test func releasingRoutersRemovesTheirHistoryListeners() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let memory = MemoryHistory(initialPath: "/")
+  let pathDocument = MemoryHistory(initialPath: "/")
+  let hashDocument = MemoryHistory(initialPath: "/app/")
+
+  func useRouters() throws {
+    let memoryRouter = MemoryRouter(routes: tree, history: memory)
+    let pathRouter = Router(routes: tree, history: BrowserHistory(history: pathDocument))
+    let hashRouter = HashRouter(routes: tree, history: BrowserHistory(history: hashDocument))
+    #expect(memory.listenerCount == 1)
+    #expect(pathDocument.listenerCount == 1)
+    #expect(hashDocument.listenerCount == 1)
+
+    try memoryRouter.navigate(to: user, params: ["id": 1])
+    try pathRouter.navigate(to: user, params: ["id": 2])
+    try hashRouter.navigate(to: user, params: ["id": 3])
+    #expect(memoryRouter.currentParams?.get("id") == "1")
+    #expect(pathRouter.currentParams?.get("id") == "2")
+    #expect(hashRouter.currentParams?.get("id") == "3")
+  }
+
+  try useRouters()
+
+  // A router's listener must not keep the router alive, so releasing it unregisters the listener.
+  #expect(memory.listenerCount == 0)
+  #expect(pathDocument.listenerCount == 0)
+  #expect(hashDocument.listenerCount == 0)
+  #expect(pathDocument.location.href == "/users/2")
+  #expect(hashDocument.location.href == "/app/#/users/3")
+}
+
+@Test func programmaticNavigationChangesStateOnlyThroughHistoryUpdates() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let history = DeferredHistory(initialPath: "/")
+  let router = HistoryRouter(routes: tree, history: history)
+  #expect(history.listenerCount == 1)
+
+  try router.navigate(to: user, params: ["id": 1])
+  // The router waits for the history's notification instead of applying the location itself.
+  #expect(router.currentRoute == home)
+  #expect(history.pendingUpdates.map(\.action) == [.push])
+
+  history.deliver()
+  #expect(history.deliveryCount == 1)
+  #expect(router.currentParams?.get("id") == "1")
+
+  try router.replace(to: user, params: ["id": 2])
+  router.navigate(to: RouteLocation(url: "/"), replace: false)
+  #expect(router.currentParams?.get("id") == "1")
+  #expect(history.pendingUpdates.map(\.action) == [.replace, .push])
+
+  history.deliver()
+  #expect(history.deliveryCount == 3)
+  #expect(router.currentRoute == home)
+  #expect(router.location == history.location)
+}
+
+@Test func memoryHistoryNotifiesOncePerProgrammaticNavigation() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let history = MemoryHistory(initialPath: "/")
+  let router = MemoryRouter(routes: tree, history: history)
+  var updates: [HistoryAction] = []
+  let subscription = history.listen { updates.append($0.action) }
+
+  try router.navigate(to: user, params: ["id": 1])
+  #expect(router.currentParams?.get("id") == "1")
+
+  try router.replace(to: user, params: ["id": 2])
+  #expect(router.currentParams?.get("id") == "2")
+
+  router.navigate(to: RouteLocation(url: "/"), replace: false)
+  #expect(router.currentRoute == home)
+
+  #expect(updates == [.push, .replace, .push])
+  subscription.cancel()
+}
+
+@Test func hashNavigationChangesStateOnlyThroughHistoryUpdates() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let document = DeferredHistory(initialPath: "/app/?lang=en")
+  let router = HistoryRouter(routes: tree, history: HashHistory(base: document))
+
+  try router.navigate(to: user, params: ["id": 1])
+  try router.replace(to: user, params: ["id": 2])
+  #expect(router.location.href == "/")
+  #expect(
+    document.pendingUpdates.map(\.location.href) == [
+      "/app/?lang=en#/users/1", "/app/?lang=en#/users/2",
+    ]
+  )
+
+  document.deliver()
+  #expect(document.deliveryCount == 2)
+  #expect(router.location.href == "/users/2")
+  #expect(router.currentParams?.get("id") == "2")
+}
+
+@Test func hashHistoryForwardsBaseUpdatesAsRouteLocations() {
+  let document = MemoryHistory(initialPath: "/app/?lang=en")
+  let hash = HashHistory(base: document)
+  var updates: [HistoryUpdate] = []
+  let subscription = hash.listen { updates.append($0) }
+  #expect(document.listenerCount == 1)
+
+  hash.push(RouteLocation(url: "/users/1?tab=posts"))
+  // A change made directly on the document, such as a fragment link click, is converted too.
+  document.push(RouteLocation(url: "/app/?lang=en#/docs"))
+  document.push(RouteLocation(url: "/app/?lang=en"))
+  hash.go(-2)
+
+  #expect(updates.map(\.action) == [.push, .push, .push, .pop])
+  #expect(updates.map(\.location.href) == ["/users/1?tab=posts", "/docs", "/", "/users/1?tab=posts"])
+
+  subscription.cancel()
+  subscription.cancel()
+  #expect(document.listenerCount == 0)
+}
+
+@Test func routersSharingAHistoryStayInSync() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let history = DeferredHistory(initialPath: "/")
+  let first = HistoryRouter(routes: tree, history: history)
+  let second = HistoryRouter(routes: tree, history: history)
+
+  try first.navigate(to: user, params: ["id": 42])
+  #expect(first.currentRoute == home)
+  #expect(second.currentRoute == home)
+
+  history.deliver()
+  #expect(history.deliveryCount == 2)
+  #expect(first.currentParams?.get("id") == "42")
+  #expect(second.currentRoute == user)
+  #expect(second.currentParams?.get("id") == "42")
+}
+
+@Test func redirectingListenerKeepsLaterRoutersOnTheLatestLocation() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  routes._route("/") { EmptyHTML() }
+  let start = routes._route("/start") { EmptyHTML() }
+  let target = routes._route("/target") { EmptyHTML() }
+  let tree = try routes._build()
+  let history = MemoryHistory(initialPath: "/")
+  var redirectSeen: [String] = []
+  // Registered before the router, so it handles every update first and redirects synchronously.
+  let redirect = history.listen { update in
+    redirectSeen.append(update.location.href)
+    if update.location.path == "/start" {
+      history.replace(RouteLocation(url: "/target"))
+    }
+  }
+  let router = MemoryRouter(routes: tree, history: history)
+  var observed: [HistoryUpdate] = []
+  let observer = history.listen { observed.append($0) }
+
+  try router.navigate(to: start)
+
+  #expect(redirectSeen == ["/start", "/target"])
+  #expect(observed.map(\.action) == [.push, .replace])
+  #expect(observed.map(\.location.href) == ["/start", "/target"])
+  #expect(history.location.href == "/target")
+  #expect(router.location == history.location)
+  #expect(router.currentRoute == target)
+
+  redirect.cancel()
+  observer.cancel()
+}
+
+@Test func nestedHistoryChangesReachEveryListenerInOrder() {
+  let history = MemoryHistory(initialPath: "/")
+  var first: [String] = []
+  var second: [String] = []
+  let chain = history.listen { update in
+    first.append(update.location.href)
+    if update.location.path == "/a" {
+      history.push(RouteLocation(url: "/b"))
+    } else if update.location.path == "/b" {
+      history.push(RouteLocation(url: "/c"))
+    }
+  }
+  let observer = history.listen { second.append($0.location.href) }
+
+  history.push(RouteLocation(url: "/a"))
+
+  #expect(first == ["/a", "/b", "/c"])
+  #expect(second == ["/a", "/b", "/c"])
+  #expect(history.location.href == "/c")
+
+  // Delivery has finished, so the next change is delivered immediately again.
+  history.push(RouteLocation(url: "/d"))
+  #expect(second == ["/a", "/b", "/c", "/d"])
+
+  chain.cancel()
+  observer.cancel()
+}
+
+@Test func listenerSubscribedDuringDeliveryReceivesOnlyLaterUpdates() {
+  let history = MemoryHistory(initialPath: "/")
+  var late: HistorySubscription?
+  var lateSeen: [String] = []
+  var lateInitialLocation = ""
+  let starter = history.listen { update in
+    guard update.location.path == "/a" else { return }
+    // `/b` is queued before the subscription, so the new listener reads it from `location`.
+    history.push(RouteLocation(url: "/b"))
+    lateInitialLocation = history.location.href
+    late = history.listen { lateSeen.append($0.location.href) }
+    history.push(RouteLocation(url: "/c"))
+  }
+
+  history.push(RouteLocation(url: "/a"))
+  #expect(lateInitialLocation == "/b")
+  #expect(lateSeen == ["/c"])
+
+  history.push(RouteLocation(url: "/d"))
+  #expect(lateSeen == ["/c", "/d"])
+
+  starter.cancel()
+  late?.cancel()
+  #expect(history.listenerCount == 0)
+}
+
+@Test func routerBackAndForwardFollowHistoryEntries() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let history = MemoryHistory(initialPath: "/")
+  let router = MemoryRouter(routes: tree, history: history)
+  var pops: [String] = []
+  let subscription = history.listen { update in
+    if update.action == .pop {
+      pops.append(update.location.href)
+    }
+  }
+
+  try router.navigate(to: user, params: ["id": 1])
+  try router.navigate(to: user, params: ["id": 2])
+
+  router.back()
+  #expect(router.location.href == "/users/1")
+  #expect(router.currentParams?.get("id") == "1")
+  router.back()
+  #expect(router.currentRoute == home)
+  #expect(pops == ["/users/1", "/"])
+
+  // Moving past the first entry is not a location change, so nothing is reported.
+  router.back()
+  #expect(pops == ["/users/1", "/"])
+
+  router.forward()
+  router.forward()
+  #expect(router.location.href == "/users/2")
+  #expect(router.currentParams?.get("id") == "2")
+  #expect(pops == ["/users/1", "/", "/users/1", "/users/2"])
+
+  router.forward()
+  #expect(pops.count == 4)
+
+  // A push after going back drops the forward entries.
+  router.back()
+  router.navigate(to: RouteLocation(url: "/"))
+  router.forward()
+  #expect(router.currentRoute == home)
+  #expect(router.location == history.location)
+  #expect(pops == ["/users/1", "/", "/users/1", "/users/2", "/users/1"])
+  subscription.cancel()
+}
+
+@Test func publicRoutersFollowBackAndForward() throws {
+  let routes = RouteBuilder<EmptyHTML>()
+  let home = routes._route("/") { EmptyHTML() }
+  let user = routes._route("/users/:id") { EmptyHTML() }
+  let tree = try routes._build()
+  let pathRouter = Router(routes: tree, history: BrowserHistory(history: MemoryHistory()))
+  let document = MemoryHistory(initialPath: "/app/")
+  let hashRouter = HashRouter(routes: tree, history: BrowserHistory(history: document))
+
+  try pathRouter.navigate(to: user, params: ["id": 1])
+  try hashRouter.navigate(to: user, params: ["id": 1])
+  pathRouter.back()
+  hashRouter.back()
+  #expect(pathRouter.currentRoute == home)
+  #expect(hashRouter.currentRoute == home)
+  #expect(document.location.href == "/app/")
+
+  pathRouter.forward()
+  hashRouter.forward()
+  #expect(pathRouter.currentParams?.get("id") == "1")
+  #expect(hashRouter.currentParams?.get("id") == "1")
+  #expect(document.location.href == "/app/#/users/1")
 }
 
 @Test func routerNavigateUpdatesLocationAndMatches() throws {

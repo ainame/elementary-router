@@ -159,7 +159,6 @@ public enum RoutesMacro: MemberMacro {
       DeclSyntax(
         stringLiteral: routesFunctionDeclaration(
           access: access,
-          mode: mode,
           routes: routes,
           layouts: layouts,
           notFound: notFound,
@@ -704,18 +703,11 @@ private func providerDeclaration(
         let router: \(router)
         let content: Content
 
-        \(access)init(_ router: \(router), @HTMLBuilder content: () -> Content) {
-          do throws(RouteTreeError) {
-            let routes = try \(containerName).routes()
-            self.routes = routes
-            self.router = router
-            self.content = content()
-          } catch {
-            preconditionFailure("\(containerName).Provider could not build routes.")
-          }
-        }
-
-        init(_ router: \(router), routes: RouteSet, @HTMLBuilder content: () -> Content) {
+        \(access)init(_ routes: RouteSet, router: \(router), @HTMLBuilder content: () -> Content) {
+          precondition(
+            router._uses(routes.tree),
+            "\(containerName).Provider requires a router created by the same RouteSet."
+          )
           self.routes = routes
           self.router = router
           self.content = content()
@@ -751,8 +743,17 @@ private func routerViewDeclaration(
           }
         }
 
+        \(access)init(_ routes: RouteSet, router: \(router)) {
+          precondition(
+            router._uses(routes.tree),
+            "\(containerName).RouterView requires a router created by the same RouteSet."
+          )
+          self.routes = routes
+          self.router = router
+        }
+
         \(access)var body: some View {
-          Provider(router, routes: routes) {
+          Provider(routes, router: router) {
             rendered
           }
         }
@@ -875,7 +876,6 @@ private func routeSetEnvironmentKeyDeclaration(containerName: String) -> String 
 
 private func routesFunctionDeclaration(
   access: String,
-  mode: RoutesMode,
   routes: [RouteDeclaration],
   layouts: [RouteDeclaration],
   notFound: FunctionDeclSyntax?,
@@ -926,10 +926,6 @@ private func routesFunctionDeclaration(
           tree: try collection._build(),
           handles: Handles(\(handles))
         )
-      }
-
-      \(access)static func router() throws(RouteTreeError) -> \(routerType(mode: mode, routeViewType: "RouteView")) {
-        try routes().router()
       }
     """
 }

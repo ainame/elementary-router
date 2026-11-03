@@ -4,13 +4,17 @@
 /// declarations. The macro generates:
 ///
 /// - `RouteView`: the typed view union rendered by this route set
-/// - `RouteSet`: the compiled route tree plus route handles
+/// - `RouteSet`: the compiled route tree plus route handles, and `router()` to create either
+///   `Router<RouteView>` or `HashRouter<RouteView>` for them
 /// - `Handles`: strongly typed route handles for each declared route
-/// - `Provider`: a route-set-specific environment provider for generated links
-/// - `RouterView`: a route-set-specific view that creates a router and renders the current route
+/// - `Provider`: a route-set-specific environment provider for a route set and its router
+/// - `RouterView`: a route-set-specific view that renders the current route
 /// - `Link`: a route-set-specific navigation view
-/// - `routes()`: builds the generated route set
-/// - `router()`: creates either `Router<RouteView>` or `HashRouter<RouteView>`
+/// - `routes()`: builds a route set
+///
+/// Each `routes()` call registers a new set of handles. Handles from one route set are rejected
+/// by routers created from another, so keep the route set that created a router and pass both to
+/// `Provider` or `RouterView`.
 ///
 /// `mode` selects whether generated links and routers use browser path routing or hash routing.
 @attached(
@@ -23,8 +27,7 @@
   named(Provider),
   named(RouterView),
   named(Link),
-  named(routes),
-  named(router)
+  named(routes)
 )
 public macro Routes(mode: RoutesMode = .path) =
   #externalMacro(module: "ElementaryRouterMacros", type: "RoutesMacro")

@@ -57,8 +57,21 @@ public final class Router<RouteContent: View> {
   private let storage: HistoryRouter<RouteContent, BrowserHistory>
 
   /// Creates a path router for the given compiled route tree.
-  public init(routes: RouteTree<RouteContent>) {
-    self.storage = HistoryRouter(routes: routes, history: BrowserHistory())
+  ///
+  /// The router observes browser history until it is released.
+  public convenience init(routes: RouteTree<RouteContent>) {
+    self.init(routes: routes, history: BrowserHistory())
+  }
+
+  init(routes: RouteTree<RouteContent>, history: BrowserHistory) {
+    self.storage = HistoryRouter(routes: routes, history: history)
+  }
+
+  /// Returns `true` when this router resolves exactly the compiled tree `routes`.
+  ///
+  /// Generated providers use this to reject a router built from a different route set.
+  public func _uses(_ routes: RouteTree<RouteContent>) -> Bool {
+    storage.routes._isSameTree(as: routes)
   }
 
   /// The current browser location.
@@ -148,8 +161,21 @@ public final class HashRouter<RouteContent: View> {
   private let storage: HistoryRouter<RouteContent, HashHistory<BrowserHistory>>
 
   /// Creates a hash router for the given compiled route tree.
-  public init(routes: RouteTree<RouteContent>) {
-    self.storage = HistoryRouter(routes: routes, history: HashHistory(base: BrowserHistory()))
+  ///
+  /// The router observes browser history until it is released.
+  public convenience init(routes: RouteTree<RouteContent>) {
+    self.init(routes: routes, history: BrowserHistory())
+  }
+
+  init(routes: RouteTree<RouteContent>, history: BrowserHistory) {
+    self.storage = HistoryRouter(routes: routes, history: HashHistory(base: history))
+  }
+
+  /// Returns `true` when this router resolves exactly the compiled tree `routes`.
+  ///
+  /// Generated providers use this to reject a router built from a different route set.
+  public func _uses(_ routes: RouteTree<RouteContent>) -> Bool {
+    storage.routes._isSameTree(as: routes)
   }
 
   /// The current browser location.
@@ -239,23 +265,27 @@ public final class HashRouter<RouteContent: View> {
 final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
+  let routes: RouteTree<RouteContent>
   private let state: RouterState
-  private let routes: RouteTree<RouteContent>
   private let history: History
-  private var subscription: HistorySubscription?
+  private let subscription: HistorySubscription
 
   init(routes: RouteTree<RouteContent>, history: History) {
+    let state = RouterState(location: history.location, matches: routes._matches(history.location))
     self.routes = routes
     self.history = history
-    self.state = RouterState(location: history.location, matches: routes._matches(history.location))
+    self.state = state
 
+    // History notifications are the only path that updates `state`, so each push, replace, or
+    // traversal is applied once. The listener captures the tree and state but not the router,
+    // so the history never keeps the router alive.
     self.subscription = history.listen { update in
-      self.apply(update.location)
+      state.apply(location: update.location, matches: routes._matches(update.location))
     }
   }
 
   deinit {
-    subscription?.cancel()
+    subscription.cancel()
   }
 
   var location: RouteLocation {
@@ -309,7 +339,6 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     } else {
       history.push(location)
     }
-    apply(location)
   }
 
   func replace(
@@ -370,10 +399,6 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
 
   func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
     try routes._render(location)
-  }
-
-  private func apply(_ location: RouteLocation) {
-    state.apply(location: location, matches: routes._matches(location))
   }
 }
 

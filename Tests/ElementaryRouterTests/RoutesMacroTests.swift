@@ -100,18 +100,11 @@ final class RoutesMacroTests: XCTestCase {
               let router: Router<RouteView>
               let content: Content
 
-              init(_ router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
-                do throws(RouteTreeError) {
-                  let routes = try AppRoutes.routes()
-                  self.routes = routes
-                  self.router = router
-                  self.content = content()
-                } catch {
-                  preconditionFailure("AppRoutes.Provider could not build routes.")
-                }
-              }
-
-              init(_ router: Router<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+              init(_ routes: RouteSet, router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
+                precondition(
+                  router._uses(routes.tree),
+                  "AppRoutes.Provider requires a router created by the same RouteSet."
+                )
                 self.routes = routes
                 self.router = router
                 self.content = content()
@@ -138,8 +131,17 @@ final class RoutesMacroTests: XCTestCase {
                 }
               }
 
+              init(_ routes: RouteSet, router: Router<RouteView>) {
+                precondition(
+                  router._uses(routes.tree),
+                  "AppRoutes.RouterView requires a router created by the same RouteSet."
+                )
+                self.routes = routes
+                self.router = router
+              }
+
               var body: some View {
-                Provider(router, routes: routes) {
+                Provider(routes, router: router) {
                   rendered
                 }
               }
@@ -238,10 +240,6 @@ final class RoutesMacroTests: XCTestCase {
                 tree: try collection._build(),
                 handles: Handles(user: user)
               )
-            }
-
-            static func router() throws(RouteTreeError) -> Router<RouteView> {
-              try routes().router()
             }
         }
         """,
@@ -364,18 +362,11 @@ final class RoutesMacroTests: XCTestCase {
               let router: Router<RouteView>
               let content: Content
 
-              init(_ router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
-                do throws(RouteTreeError) {
-                  let routes = try AppRoutes.routes()
-                  self.routes = routes
-                  self.router = router
-                  self.content = content()
-                } catch {
-                  preconditionFailure("AppRoutes.Provider could not build routes.")
-                }
-              }
-
-              init(_ router: Router<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+              init(_ routes: RouteSet, router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
+                precondition(
+                  router._uses(routes.tree),
+                  "AppRoutes.Provider requires a router created by the same RouteSet."
+                )
                 self.routes = routes
                 self.router = router
                 self.content = content()
@@ -402,8 +393,17 @@ final class RoutesMacroTests: XCTestCase {
                 }
               }
 
+              init(_ routes: RouteSet, router: Router<RouteView>) {
+                precondition(
+                  router._uses(routes.tree),
+                  "AppRoutes.RouterView requires a router created by the same RouteSet."
+                )
+                self.routes = routes
+                self.router = router
+              }
+
               var body: some View {
-                Provider(router, routes: routes) {
+                Provider(routes, router: router) {
                   rendered
                 }
               }
@@ -502,10 +502,6 @@ final class RoutesMacroTests: XCTestCase {
                 tree: try collection._build(),
                 handles: Handles(valid: valid)
               )
-            }
-
-            static func router() throws(RouteTreeError) -> Router<RouteView> {
-              try routes().router()
             }
         }
         """,
@@ -618,18 +614,11 @@ final class RoutesMacroTests: XCTestCase {
               let router: Router<RouteView>
               let content: Content
 
-              init(_ router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
-                do throws(RouteTreeError) {
-                  let routes = try AppRoutes.routes()
-                  self.routes = routes
-                  self.router = router
-                  self.content = content()
-                } catch {
-                  preconditionFailure("AppRoutes.Provider could not build routes.")
-                }
-              }
-
-              init(_ router: Router<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+              init(_ routes: RouteSet, router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
+                precondition(
+                  router._uses(routes.tree),
+                  "AppRoutes.Provider requires a router created by the same RouteSet."
+                )
                 self.routes = routes
                 self.router = router
                 self.content = content()
@@ -656,8 +645,17 @@ final class RoutesMacroTests: XCTestCase {
                 }
               }
 
+              init(_ routes: RouteSet, router: Router<RouteView>) {
+                precondition(
+                  router._uses(routes.tree),
+                  "AppRoutes.RouterView requires a router created by the same RouteSet."
+                )
+                self.routes = routes
+                self.router = router
+              }
+
               var body: some View {
-                Provider(router, routes: routes) {
+                Provider(routes, router: router) {
                   rendered
                 }
               }
@@ -757,10 +755,6 @@ final class RoutesMacroTests: XCTestCase {
                 handles: Handles(user: user)
               )
             }
-
-            static func router() throws(RouteTreeError) -> Router<RouteView> {
-              try routes().router()
-            }
         }
         """,
       diagnostics: [
@@ -857,18 +851,11 @@ final class RoutesMacroTests: XCTestCase {
               let router: HashRouter<RouteView>
               let content: Content
 
-              init(_ router: HashRouter<RouteView>, @HTMLBuilder content: () -> Content) {
-                do throws(RouteTreeError) {
-                  let routes = try DocsRoutes.routes()
-                  self.routes = routes
-                  self.router = router
-                  self.content = content()
-                } catch {
-                  preconditionFailure("DocsRoutes.Provider could not build routes.")
-                }
-              }
-
-              init(_ router: HashRouter<RouteView>, routes: RouteSet, @HTMLBuilder content: () -> Content) {
+              init(_ routes: RouteSet, router: HashRouter<RouteView>, @HTMLBuilder content: () -> Content) {
+                precondition(
+                  router._uses(routes.tree),
+                  "DocsRoutes.Provider requires a router created by the same RouteSet."
+                )
                 self.routes = routes
                 self.router = router
                 self.content = content()
@@ -895,8 +882,17 @@ final class RoutesMacroTests: XCTestCase {
                 }
               }
 
+              init(_ routes: RouteSet, router: HashRouter<RouteView>) {
+                precondition(
+                  router._uses(routes.tree),
+                  "DocsRoutes.RouterView requires a router created by the same RouteSet."
+                )
+                self.routes = routes
+                self.router = router
+              }
+
               var body: some View {
-                Provider(router, routes: routes) {
+                Provider(routes, router: router) {
                   rendered
                 }
               }
@@ -995,10 +991,6 @@ final class RoutesMacroTests: XCTestCase {
                 tree: try collection._build(),
                 handles: Handles(docs: docs)
               )
-            }
-
-            static func router() throws(RouteTreeError) -> HashRouter<RouteView> {
-              try routes().router()
             }
         }
         """,

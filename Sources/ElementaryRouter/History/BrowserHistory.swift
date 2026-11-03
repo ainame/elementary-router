@@ -1,11 +1,19 @@
+/// The document history used by `Router` and, through `HashHistory`, by `HashRouter`.
+///
+/// Browser builds drive `window.history` and observe `popstate`. Native builds cannot reach a
+/// JavaScript host, so they keep the same contract with an in-memory history.
 final class BrowserHistory: RouterHistory {
-  #if canImport(JavaScriptKit)
+  #if canImport(JavaScriptKit) && arch(wasm32)
     private let history = _JavaScriptBrowserHistory()
-  #else
-    private let history = MemoryHistory()
-  #endif
 
-  init() {}
+    init() {}
+  #else
+    private let history: MemoryHistory
+
+    init(history: MemoryHistory = MemoryHistory()) {
+      self.history = history
+    }
+  #endif
 
   var location: RouteLocation {
     history.location
@@ -41,11 +49,7 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
   }
 
   var location: RouteLocation {
-    let hash = base.location.hash
-    if hash.isEmpty {
-      return RouteLocation()
-    }
-    return RouteLocation(url: hash)
+    HashHistory.routeLocation(in: base.location)
   }
 
   func push(_ location: RouteLocation) {
@@ -61,8 +65,12 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
   }
 
   func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription {
+    // Derive the route location from the update instead of reading `self`, so the base history's
+    // listener storage never retains this adapter.
     base.listen { update in
-      listener(HistoryUpdate(action: update.action, location: self.location))
+      listener(
+        HistoryUpdate(action: update.action, location: HashHistory.routeLocation(in: update.location))
+      )
     }
   }
 
@@ -70,6 +78,13 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
   /// and outer query string for normal clicks, modified clicks, and copied links alike.
   func href(for location: RouteLocation) -> String {
     "#" + location.href
+  }
+
+  private static func routeLocation(in document: RouteLocation) -> RouteLocation {
+    if document.hash.isEmpty {
+      return RouteLocation()
+    }
+    return RouteLocation(url: document.hash)
   }
 
   private func documentLocation(for location: RouteLocation) -> RouteLocation {
@@ -82,21 +97,29 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
   }
 }
 
-#if canImport(JavaScriptKit)
+#if canImport(JavaScriptKit) && arch(wasm32)
   import JavaScriptKit
 
   final class _JavaScriptBrowserHistory: RouterHistory {
-    private var fallback = MemoryHistory()
+    private let listeners: HistoryListeners
+    /// Used when the JavaScript host has no `window.history`; its updates are forwarded.
+    private let fallback: MemoryHistory
+    private let fallbackSubscription: HistorySubscription
+    /// The `popstate` callback, registered on `window` only while there are listeners.
     private var popStateClosure: JSClosure?
 
-    var location: RouteLocation {
-      guard let location = JSObject.global.location.object else {
-        return fallback.location
+    init() {
+      let listeners = HistoryListeners()
+      let fallback = MemoryHistory()
+      self.listeners = listeners
+      self.fallback = fallback
+      self.fallbackSubscription = fallback.listen { update in
+        listeners.notify(update)
       }
-      let path = location.pathname.string ?? "/"
-      let query = location.search.string ?? ""
-      let hash = location["hash"].string ?? ""
-      return RouteLocation(path: path, queryString: query, hash: hash)
+    }
+
+    var location: RouteLocation {
+      _JavaScriptBrowserHistory.windowLocation() ?? fallback.location
     }
 
     func push(_ location: RouteLocation) {
@@ -110,6 +133,8 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
         "",
         location.href
       )
+      // `pushState` does not emit `popstate`, so report the change here.
+      listeners.notify(HistoryUpdate(action: .push, location: self.location))
     }
 
     func replace(_ location: RouteLocation) {
@@ -123,8 +148,11 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
         "",
         location.href
       )
+      // `replaceState` does not emit `popstate`, so report the change here.
+      listeners.notify(HistoryUpdate(action: .replace, location: self.location))
     }
 
+    /// Browsers report the resulting location through `popstate` once traversal finishes.
     func go(_ delta: Int) {
       guard let history = JSObject.global.history.object else {
         fallback.go(delta)
@@ -134,26 +162,52 @@ final class HashHistory<Base: RouterHistory>: RouterHistory {
     }
 
     func listen(_ listener: @escaping (HistoryUpdate) -> Void) -> HistorySubscription {
+      let subscription = listeners.subscribe(listener) { [self] remaining in
+        if remaining == 0 {
+          removePopStateListener()
+        }
+      }
+      addPopStateListenerIfNeeded()
+      return subscription
+    }
+
+    private func addPopStateListenerIfNeeded() {
+      guard popStateClosure == nil else { return }
+      // JavaScriptKit keeps the closure body alive until the browser collects the function, so
+      // the body captures only the listener storage, never this history.
+      let listeners = self.listeners
       let closure = JSClosure { _ in
-        listener(HistoryUpdate(action: .pop, location: self.location))
+        if let location = _JavaScriptBrowserHistory.windowLocation() {
+          listeners.notify(HistoryUpdate(action: .pop, location: location))
+        }
         return .undefined
       }
-      popStateClosure = closure
       _ = JSObject.global["addEventListener"].function?.callAsFunction(
         this: JSObject.global,
         "popstate",
         closure
       )
-      return HistorySubscription {
-        if let closure = self.popStateClosure {
-          _ = JSObject.global["removeEventListener"].function?.callAsFunction(
-            this: JSObject.global,
-            "popstate",
-            closure
-          )
-        }
-        self.popStateClosure = nil
+      popStateClosure = closure
+    }
+
+    private func removePopStateListener() {
+      guard let closure = popStateClosure else { return }
+      popStateClosure = nil
+      _ = JSObject.global["removeEventListener"].function?.callAsFunction(
+        this: JSObject.global,
+        "popstate",
+        closure
+      )
+    }
+
+    private static func windowLocation() -> RouteLocation? {
+      guard let location = JSObject.global.location.object else {
+        return nil
       }
+      let path = location.pathname.string ?? "/"
+      let query = location.search.string ?? ""
+      let hash = location["hash"].string ?? ""
+      return RouteLocation(path: path, queryString: query, hash: hash)
     }
   }
 #endif

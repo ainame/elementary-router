@@ -82,12 +82,25 @@ app.mount(in: .body)
 ```
 
 If you need programmatic access to generated handles, href helpers, or the router,
-build the route set explicitly:
+build the route set explicitly and render with that same route set and router:
 
 ```swift
 let routes = try AppRoutes.routes()
 let router = routes.router()
+
+let app = Application(AppRoutes.RouterView(routes, router: router))
+app.mount(in: .body)
+
+try router.navigate(to: routes.handles.profile, params: ["lang": "ja", "profileId": 42])
 ```
+
+Each `routes()` call registers a new set of route handles. Handles belong to the
+route set that registered them, so a handle from another `@Routes` type, or from
+a separate `routes()` call, is rejected: `href(to:)` and `navigate(to:)` throw
+`RouteMatchError.foreignRoute`, and `isActive` returns `false`.
+`AppRoutes.RouterView(routes, router:)` and `AppRoutes.Provider(routes, router:)`
+stop with a precondition failure when the router was not created by
+`routes.router()`.
 
 Use hash routing explicitly when you need static-hosting fallback:
 
@@ -154,12 +167,13 @@ The macro generates:
 
 - `AppRoutes.RouteView`: a single typed view union for all route outputs
 - `AppRoutes.Handles`: named route handles
-- `AppRoutes.RouteSet`: the generated handles plus router-aware href helpers
-- `AppRoutes.Provider`: a typed router provider for this route declaration
-- `AppRoutes.RouterView`: a typed route boundary that creates the router and renders the current route
+- `AppRoutes.RouteSet`: the generated handles plus href helpers, and
+  `router()` to create the typed router for the declared routing mode
+- `AppRoutes.Provider`: installs a route set and its router for the content below it
+- `AppRoutes.RouterView`: a typed route boundary that renders the current route,
+  either for a route set and router you pass in or for ones it creates itself
 - `AppRoutes.Link`: a typed link view for this route declaration
-- `AppRoutes.routes()`: the factory used to build the generated route set
-- `AppRoutes.router()`: the typed router factory for the declared routing mode
+- `AppRoutes.routes()`: the factory used to build a route set
 - route-specific href helpers, such as `profileHref(...)`
 
 Route declarations must be `static func` members inside the `@Routes` struct.
@@ -300,6 +314,12 @@ an invalid `Int` path parameter.
 - `Router.currentRoute` and `Router.currentParams` are leaf conveniences.
 - `Router` uses standard browser path routing.
 - `HashRouter` is available when you explicitly want hash-based routing; its hrefs are fragments like `#/users/42`.
+- Route handles belong to the route set that registered them; see the identity rules above.
+  `RouteBuilder._build()` throws `RouteTreeError.foreignParent` when a route names a
+  parent handle registered by another builder.
+- A router observes browser history from creation until it is released. Every
+  navigation, including `pushState`-based client navigation, which does not emit
+  `popstate`, and browser back and forward, updates the router state exactly once.
 
 ### Matching Precedence
 
@@ -346,10 +366,11 @@ eligible clicks:
 Modifier clicks, middle clicks, and `_blank` targets stay native browser
 behavior.
 
-`AppRoutes.Provider` installs a concrete `Router<AppRoutes.RouteView>` or
-`HashRouter<AppRoutes.RouteView>` in ElementaryUI's environment, and
-`AppRoutes.RouterView` and `AppRoutes.Link(to:)` read that typed router back
-without existential erasure.
+`AppRoutes.Provider(routes, router:)` installs a route set and the concrete
+`Router<AppRoutes.RouteView>` or `HashRouter<AppRoutes.RouteView>` created by
+that route set in ElementaryUI's environment. `AppRoutes.RouterView` installs
+its route set and router through the provider, and `AppRoutes.Link(to:)` reads
+the typed router back without existential erasure.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call

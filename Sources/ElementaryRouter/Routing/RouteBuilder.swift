@@ -13,6 +13,9 @@ public enum RouteTreeError: Error, Equatable, Sendable {
   case duplicateParameter(path: String, name: String)
   /// A path pattern used `*` before its final segment.
   case invalidWildcard(path: String)
+  /// A route or layout declared at `path` named a parent handle registered by a different
+  /// `RouteBuilder`.
+  case foreignParent(path: String)
 }
 
 /// Builds a typed route tree programmatically.
@@ -24,7 +27,8 @@ public final class RouteBuilder<RouteContent: View> {
   private var records: [RecordBuilder] = []
   private var notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   private var errorRenderer: ((RouteErrorContext) -> RouteContent)?
-  private var nextID = 0
+  private let registration = RouteRegistration()
+  private var nextIndex = 0
 
   /// Creates an empty route builder.
   public init() {}
@@ -121,6 +125,13 @@ public final class RouteBuilder<RouteContent: View> {
     var compiled: [RouteTree<RouteContent>.Record] = []
     let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.handle.id, $0) })
 
+    // Handles are only created by registration, so a parent from this builder is always present.
+    for record in records {
+      if let parent = record.parent, parent.id.registration != registration {
+        throw RouteTreeError.foreignParent(path: record.path)
+      }
+    }
+
     for record in records {
       let pattern = try RoutePattern(resolvedPath(for: record, recordsByID: recordsByID))
       // Routes conflict with routes and layouts with layouts. A layout never matches on its own,
@@ -160,10 +171,12 @@ public final class RouteBuilder<RouteContent: View> {
       if leftDepth != rightDepth {
         return leftDepth > rightDepth
       }
-      return lhs.handle.id.rawValue < rhs.handle.id.rawValue
+      return lhs.handle.id.index < rhs.handle.id.index
     }
 
     return RouteTree(
+      registration: registration,
+      identity: RouteTreeIdentity(),
       records: compiled,
       notFoundRenderer: notFoundRenderer,
       errorRenderer: errorRenderer
@@ -177,8 +190,8 @@ public final class RouteBuilder<RouteContent: View> {
     isLeaf: Bool,
     render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    let handle = RouteHandle(id: .init(rawValue: nextID))
-    nextID += 1
+    let handle = RouteHandle(id: .init(registration: registration, index: nextIndex))
+    nextIndex += 1
     records.append(
       RecordBuilder(handle: handle, parent: parent, path: path, isLeaf: isLeaf, render: render)
     )

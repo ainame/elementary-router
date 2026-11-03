@@ -2,7 +2,11 @@ import ElementaryUI
 
 /// Errors thrown while building an href from a route handle.
 public enum RouteMatchError: Error, Equatable, Sendable {
-  /// The supplied route handle was not registered in this tree.
+  /// The supplied route handle was registered by a different route builder, such as another
+  /// `@Routes` type or a separate `routes()` call.
+  case foreignRoute
+  /// The supplied route handle belongs to this tree's builder but was registered after the tree
+  /// was built.
   case unknownRoute
   /// A required path parameter was missing, or empty, while building the target URL.
   case missingRequiredParameter(name: String)
@@ -28,9 +32,26 @@ public struct RouteTree<RouteContent: View> {
     case error(RouteErrorContext)
   }
 
+  /// The builder registration whose handles this tree accepts.
+  let registration: RouteRegistration
+  /// The identity of this compiled snapshot, shared by every copy of it.
+  ///
+  /// A builder can register more routes and build again, so two trees from one registration
+  /// may resolve different handles; only copies of one `_build()` result are the same tree.
+  let identity: RouteTreeIdentity
   let records: [Record]
   let notFoundRenderer: ((RouteNotFoundContext) -> RouteContent)?
   let errorRenderer: ((RouteErrorContext) -> RouteContent)?
+
+  /// Returns `true` when both values are copies of the same `_build()` result.
+  public func _isSameTree(as other: RouteTree<RouteContent>) -> Bool {
+    identity === other.identity
+  }
+
+  /// Returns `true` when `route` was registered by the builder that produced this tree.
+  func owns(_ route: RouteHandle) -> Bool {
+    route.id.registration == registration
+  }
 
   func _match(_ location: RouteLocation) -> RouteMatch? {
     _matches(location).last
@@ -48,6 +69,9 @@ public struct RouteTree<RouteContent: View> {
     query: RouteValues = RouteValues(),
     hash: String = ""
   ) throws(RouteMatchError) -> String {
+    guard owns(route) else {
+      throw RouteMatchError.foreignRoute
+    }
     guard let record = records.first(where: { $0.handle == route }) else {
       throw RouteMatchError.unknownRoute
     }

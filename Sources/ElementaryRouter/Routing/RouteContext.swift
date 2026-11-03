@@ -1,11 +1,35 @@
+/// The identity shared by every route registered through one `RouteBuilder`.
+///
+/// Equality is object identity. Every handle retains its registration, so the identity cannot be
+/// reused by another builder while any handle or tree from this builder is still alive.
+final class RouteRegistration: Hashable, Sendable {
+  init() {}
+
+  static func == (lhs: RouteRegistration, rhs: RouteRegistration) -> Bool {
+    lhs === rhs
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(ObjectIdentifier(self))
+  }
+}
+
+/// The identity of one compiled route tree, compared by object identity.
+final class RouteTreeIdentity: Sendable {
+  init() {}
+}
+
 /// Identifies a route registered in a route tree.
 ///
 /// Handles are generated during route registration and are used for navigation, active-route
 /// checks, and URL building. They do not encode a path directly; the route tree resolves them.
+/// A handle belongs to the builder that registered it: handles from unrelated route trees, or
+/// from separate `routes()` calls of the same `@Routes` type, never compare equal.
 public struct RouteHandle: Hashable, Equatable, Sendable, Identifiable {
   /// Opaque stable identifier for a registered route.
   public struct ID: Hashable, Equatable, Sendable {
-    let rawValue: Int
+    let registration: RouteRegistration
+    let index: Int
   }
 
   /// The opaque identifier of this route handle.
