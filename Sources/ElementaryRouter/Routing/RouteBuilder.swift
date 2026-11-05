@@ -20,6 +20,11 @@ public enum RouteTreeError: Error, Equatable, Sendable {
   /// A route or layout declared at `path` named a parent handle registered by a different
   /// `RouteBuilder`.
   case foreignParent(path: String)
+  /// One feature type was mounted at `path` and again at `conflictingPath`.
+  ///
+  /// Feature views find their route set by its type, so the views of both mounts would read the
+  /// same route set and link into one of them.
+  case duplicateFeature(path: String, conflictingPath: String)
 }
 
 /// Builds a typed route tree programmatically.
@@ -130,6 +135,23 @@ public final class RouteBuilder<RouteContent: View> {
     decode: @escaping (RouteContext) throws(RouteValueError) -> Void
   ) -> RouteHandle {
     add(path: path, parent: parent, isLeaf: false, render: .decode(decode))
+  }
+
+  /// Rejects a feature type mounted at more than one path.
+  ///
+  /// Each entry is the environment identity of a mounted feature's route set, such as
+  /// `ShopRoutes<AppRoutes.RouteView>.RouteSet._environmentIdentity`, with its mount path. The
+  /// identity is the specialized type itself, so aliases and module-qualified spellings of one
+  /// feature are found, while features of other modules that share its name are not. Generated
+  /// hosts call this before they register any route.
+  public static func _checkDistinctFeatures(
+    _ mounts: [(identity: ObjectIdentifier, path: String)]
+  ) throws(RouteTreeError) {
+    for index in mounts.indices {
+      for earlier in mounts[..<index] where earlier.identity == mounts[index].identity {
+        throw RouteTreeError.duplicateFeature(path: mounts[index].path, conflictingPath: earlier.path)
+      }
+    }
   }
 
   /// Registers the renderer used when no route matches the current location.

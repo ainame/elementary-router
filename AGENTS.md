@@ -32,6 +32,9 @@
 - The current app-level workaround is to have `Link` emit `data-router-link="true"` and add a capture-phase HTML script that calls `preventDefault()` for eligible same-origin clicks before ElementaryUI's Swift `onClick` handler runs. Keep this documented as a workaround, not the final library contract.
 - Nested route rendering is implemented through typed `@Layout` and `Outlet<Content>`; avoid runtime-erased outlet designs unless the route identity model is redesigned.
 - Route-specific convenience should stay typed. Prefer generated APIs like `AppRoutes.Provider`, `AppRoutes.RouterView`, and `AppRoutes.Link` over existential router environment storage.
+- Feature composition is static and typed: a feature is a `@Routes` struct generic over the host route view (`ShopRoutes<Root: View>`), and a host mounts it with `@Mount("/shop") typealias Shop = ShopRoutes<RouteView>`. The host owns the tree, the router, layouts, fallbacks, and mode. Do not add runtime plugin registration, mounts with path parameters, merged compiled trees, or casts between route view types.
+- Feature views reach the host router only through `RouteNavigator<Root>` (an enum over the concrete `Router`/`HashRouter`) and `RouteLink`; keep them free of router protocols and existentials.
+- A mounted feature's identity is its specialized type, never its spelled name: feature route sets and navigators are type-keyed environment objects (`_RouteEnvironmentObject`), and duplicate mounts are rejected by comparing `RouteSet._environmentIdentity` in generated `routes()`. Do not add name-based feature keys or name-based duplicate diagnostics; same-named features from different modules must keep mounting side by side.
 
 ## Release Hygiene
 
@@ -40,7 +43,8 @@
 - `Examples/RouterExample` should build against the local package path and upstream `elementary-ui`.
 - `Examples/TodoApp` should build against the local package path and upstream `elementary-ui`.
 - `Tests/BrowserAcceptance/LayoutState` should build against the local package path and upstream `elementary-ui`.
-- If the Link interception workaround changes, update `README.md`, each example `index.html`, and `Tests/BrowserAcceptance/LayoutState/index.html`.
+- `Examples/FeatureComposition` should build against the local package path and upstream `elementary-ui`; its `Shop` and `Blog` library products are also used by `Tests/BrowserAcceptance/FeatureComposition`.
+- If the Link interception workaround changes, update `README.md`, each example `index.html`, and each `Tests/BrowserAcceptance/*/index.html`. Keep `RouteLink` in sync with the generated `Link`.
 
 ## Style
 
@@ -55,18 +59,23 @@
 Run these before handing off Swift changes:
 
 ```sh
-swift-format lint --configuration .swift-format Package.swift Sources Tests Examples/RouterExample/Package.swift Examples/RouterExample/Sources Examples/TodoApp/Package.swift Examples/TodoApp/Sources --recursive --parallel
+swift-format lint --configuration .swift-format Package.swift Sources Tests Examples/RouterExample/Package.swift Examples/RouterExample/Sources Examples/TodoApp/Package.swift Examples/TodoApp/Sources Examples/FeatureComposition/Package.swift Examples/FeatureComposition/Sources --recursive --parallel
 swift test
 cd Examples/RouterExample && swift build
 cd Examples/RouterExample && npm run build
 cd Examples/TodoApp && swift build
 cd Examples/TodoApp && npm run build
+cd Examples/FeatureComposition && swift build
+cd Examples/FeatureComposition && npm run build
 cd Tests/BrowserAcceptance/LayoutState && swift build
 cd Tests/BrowserAcceptance/LayoutState && npm run build
+cd Tests/BrowserAcceptance/FeatureComposition && swift build
+cd Tests/BrowserAcceptance/FeatureComposition && npm run build
 Scripts/check-compile-failures.sh
 ```
 
 - `Tests/BrowserAcceptance/LayoutState` is a browser fixture for layout mount lifetime and `RouterView` ownership. Run it in a real browser as its README describes when changing generated `RouteView`, `RouterView`, or layout rendering; unit tests cannot observe DOM identity.
+- `Tests/BrowserAcceptance/FeatureComposition` is a browser fixture for mounted features in path and hash mode. Run it with and without `&mode=hash` when changing `@Mount`, feature generation, `RouteNavigator`, or `RouteLink`.
 
 - `Scripts/check-compile-failures.sh` builds `Tests/CompileChecks`, a downstream package whose `ValidUsage` target must compile and whose `Rejects*` targets must fail with the error named by each file's `// expected-error:` line. Add a `Rejects*` target when a misuse of the typed API should stay a compile error.
 

@@ -56,15 +56,21 @@ public final class Router<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, BrowserHistory>
 
+  /// This router as seen by views that only know its route content type, such as the views of
+  /// mounted features. Generated providers install it in the environment.
+  public let navigator: RouteNavigator<RouteContent>
+
   /// Creates a path router for the given compiled route tree.
   ///
-  /// The router observes browser history until it is released.
+  /// The router observes browser history until it and its navigator are released.
   public convenience init(routes: RouteTree<RouteContent>) {
     self.init(routes: routes, history: BrowserHistory())
   }
 
   init(routes: RouteTree<RouteContent>, history: BrowserHistory) {
-    self.storage = HistoryRouter(routes: routes, history: history)
+    let storage = HistoryRouter(routes: routes, history: history)
+    self.storage = storage
+    self.navigator = RouteNavigator(storage: .path(storage))
   }
 
   /// Returns `true` when this router resolves exactly the compiled tree `routes`.
@@ -207,15 +213,21 @@ public final class HashRouter<RouteContent: View> {
 
   private let storage: HistoryRouter<RouteContent, HashHistory<BrowserHistory>>
 
+  /// This router as seen by views that only know its route content type, such as the views of
+  /// mounted features. Generated providers install it in the environment.
+  public let navigator: RouteNavigator<RouteContent>
+
   /// Creates a hash router for the given compiled route tree.
   ///
-  /// The router observes browser history until it is released.
+  /// The router observes browser history until it and its navigator are released.
   public convenience init(routes: RouteTree<RouteContent>) {
     self.init(routes: routes, history: BrowserHistory())
   }
 
   init(routes: RouteTree<RouteContent>, history: BrowserHistory) {
-    self.storage = HistoryRouter(routes: routes, history: HashHistory(base: history))
+    let storage = HistoryRouter(routes: routes, history: HashHistory(base: history))
+    self.storage = storage
+    self.navigator = RouteNavigator(storage: .hash(storage))
   }
 
   /// Returns `true` when this router resolves exactly the compiled tree `routes`.

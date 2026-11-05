@@ -34,11 +34,31 @@ let package = Package(
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
       ]
     ),
+    // Two test-only feature modules that both declare a feature named `Routes`, so tests can
+    // mount same-named features from separate modules into one host.
+    .target(
+      name: "SameNameFeatureAlpha",
+      dependencies: [
+        "ElementaryRouter",
+        .product(name: "ElementaryUI", package: "elementary-ui"),
+      ],
+      path: "Tests/Fixtures/SameNameFeatureAlpha"
+    ),
+    .target(
+      name: "SameNameFeatureBeta",
+      dependencies: [
+        "ElementaryRouter",
+        .product(name: "ElementaryUI", package: "elementary-ui"),
+      ],
+      path: "Tests/Fixtures/SameNameFeatureBeta"
+    ),
     .testTarget(
       name: "ElementaryRouterTests",
       dependencies: [
         "ElementaryRouter",
         "ElementaryRouterMacros",
+        "SameNameFeatureAlpha",
+        "SameNameFeatureBeta",
         .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
       ]
     ),

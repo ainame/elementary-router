@@ -24,16 +24,47 @@ public enum RoutesMacro: MemberMacro {
 
     let containerName = structDeclaration.name.text
     let access = declaration.accessModifier
-    let mode = parseRoutesMode(from: node, context: context)
+    // A generic route struct is a feature: its routes are mounted into a host route tree whose
+    // route view is the generic parameter.
+    let isFeature = structDeclaration.genericParameterClause != nil
+    let featureRoot = structDeclaration.genericParameterClause.flatMap { clause in
+      clause.parameters.count == 1 ? clause.parameters.first?.name.text : nil
+    }
+    if isFeature, featureRoot == nil {
+      context.diagnose(
+        .init(node: Syntax(structDeclaration.name), message: RoutesDiagnostic.featureGenericParameters)
+      )
+      return []
+    }
+    if isFeature, let modeArgument = node.modeArgument {
+      context.diagnose(.init(node: Syntax(modeArgument), message: RoutesDiagnostic.featureMode))
+    }
+    let mode = isFeature ? .path : parseRoutesMode(from: node, context: context)
     // Declarations with an error get no generated code, so an invalid signature is reported once,
     // by its diagnostic, instead of again as malformed or mistyped generated Swift.
     let diagnosed = DiagnosedDeclarations(context)
     var routes: [RouteDeclaration] = []
     var layouts: [RouteDeclaration] = []
+    var mounts: [MountDeclaration] = []
     var notFound: FunctionDeclSyntax?
     var routeError: FunctionDeclSyntax?
 
     for member in declaration.memberBlock.members {
+      if let alias = member.decl.as(TypeAliasDeclSyntax.self), alias.hasAttribute(named: "Mount") {
+        if isFeature {
+          diagnosed.diagnose(.init(node: Syntax(alias), message: RoutesDiagnostic.featureMount))
+        } else if let path = alias.stringLiteralArgument(forAttributeNamed: "Mount") {
+          if let mount = parseMount(alias, path: path, containerName: containerName, context: diagnosed) {
+            mounts.append(mount)
+          }
+        } else {
+          diagnosed.diagnose(
+            .init(node: Syntax(alias), message: RoutesDiagnostic.mountRequiresStringLiteral)
+          )
+        }
+        continue
+      }
+
       guard let function = member.decl.as(FunctionDeclSyntax.self) else {
         continue
       }
@@ -77,6 +108,13 @@ public enum RoutesMacro: MemberMacro {
         layouts.append(layout)
       }
 
+      if isFeature, function.hasAttribute(named: "NotFound") || function.hasAttribute(named: "RouteError") {
+        if function.isStatic {
+          context.diagnose(.init(node: Syntax(function), message: RoutesDiagnostic.featureFallback))
+        }
+        continue
+      }
+
       if function.hasAttribute(named: "NotFound") {
         guard function.isStatic else {
           continue
@@ -105,6 +143,9 @@ public enum RoutesMacro: MemberMacro {
     }
 
     validateNames(in: RouteHierarchy(routes: routes, layouts: layouts), context: diagnosed)
+    if isFeature {
+      validateFeatureNames(routes + layouts, context: diagnosed)
+    }
     // Schemas combine a route with its layouts, so they are only checked for declarations that
     // are valid on their own; otherwise one bad signature would also be reported as a conflict.
     let checked = RouteHierarchy(
@@ -112,9 +153,40 @@ public enum RoutesMacro: MemberMacro {
       layouts: layouts.filter(diagnosed.isValid)
     )
     validateDestinationSchemas(in: checked, context: diagnosed)
-    let hierarchy = RouteHierarchy(
+    var hierarchy = RouteHierarchy(
       routes: checked.routes.filter(diagnosed.isValid),
       layouts: checked.layouts
+    )
+
+    let validMounts = mounts.filter(diagnosed.isValid)
+    if !validMounts.isEmpty {
+      validateMounts(
+        validMounts,
+        in: hierarchy,
+        declaredNames: (routes + layouts).map(\.name),
+        context: diagnosed
+      )
+      hierarchy = RouteHierarchy(
+        routes: hierarchy.routes.filter(diagnosed.isValid),
+        layouts: hierarchy.layouts.filter(diagnosed.isValid),
+        mounts: validMounts.filter(diagnosed.isValid)
+      )
+    }
+
+    if let featureRoot {
+      return featureDeclarations(
+        access: access,
+        containerName: containerName,
+        root: featureRoot,
+        hierarchy: hierarchy
+      )
+      .map { DeclSyntax(stringLiteral: $0) }
+    }
+
+    let mountHandleNames = Dictionary(
+      uniqueKeysWithValues: hierarchy.mounts.map { mount in
+        (mount.name, context.makeUniqueName("\(mount.name)Handles").text)
+      }
     )
 
     return [
@@ -122,6 +194,7 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: routeViewDeclaration(
           access: access,
           containerName: containerName,
+          containerReference: containerName,
           hierarchy: hierarchy,
           notFound: notFound,
           routeError: routeError
@@ -131,7 +204,8 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: handlesDeclaration(
           access: access,
           routes: hierarchy.routes,
-          layouts: hierarchy.layouts
+          layouts: hierarchy.layouts,
+          mounts: hierarchy.mounts
         )
       ),
       DeclSyntax(
@@ -156,7 +230,8 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: providerDeclaration(
           access: access,
           mode: mode,
-          containerName: containerName
+          containerName: containerName,
+          mounts: hierarchy.mounts
         )
       ),
       DeclSyntax(
@@ -176,13 +251,135 @@ public enum RoutesMacro: MemberMacro {
       DeclSyntax(
         stringLiteral: routesFunctionDeclaration(
           access: access,
+          containerName: containerName,
           hierarchy: hierarchy,
+          mountHandleNames: mountHandleNames,
           notFound: notFound,
           routeError: routeError
         )
       ),
     ]
   }
+}
+
+/// The declarations of a feature: a generic `@Routes` struct whose routes a host mounts.
+///
+/// The feature's route view is concrete for each host `root`, so the host's outlet stores it as
+/// one case. A feature has no router, provider, link, or fallbacks; its host owns them.
+private func featureDeclarations(
+  access: String,
+  containerName: String,
+  root: String,
+  hierarchy: RouteHierarchy
+) -> [String] {
+  [
+    routeViewDeclaration(
+      access: access,
+      containerName: containerName,
+      containerReference: "\(containerName)<\(root)>",
+      hierarchy: hierarchy,
+      notFound: nil,
+      routeError: nil
+    ),
+    handlesDeclaration(
+      access: access,
+      routes: hierarchy.routes,
+      layouts: hierarchy.layouts,
+      mounts: []
+    ),
+    featureRouteSetDeclaration(
+      access: access,
+      containerName: containerName,
+      root: root,
+      hierarchy: hierarchy
+    ),
+    featureRegistrationDeclaration(access: access, root: root, hierarchy: hierarchy),
+  ]
+}
+
+private func featureRouteSetDeclaration(
+  access: String,
+  containerName: String,
+  root: String,
+  hierarchy: RouteHierarchy
+) -> String {
+  let factories = hierarchy.routes.map {
+    destinationFactoryDeclaration(
+      access: access,
+      containerName: containerName,
+      route: $0,
+      hierarchy: hierarchy,
+      contentType: root
+    )
+  }
+  .joined(separator: "\n\n")
+
+  return """
+      /// This feature's routes in a host route tree, with a typed destination factory per route.
+      ///
+      /// Destinations are `RouteDestination<\(root)>` values of the host tree, so the host router
+      /// and `RouteLink` accept them, and the host's own destinations share their type.
+      ///
+      /// The host's `Provider` installs the route set by its type; feature views read it with
+      /// `@Environment(\(containerName)<\(root)>.RouteSet.self) var routes: \(containerName)<\(root)>.RouteSet?`.
+      /// Each specialization is its own environment key, so features with the same name in other
+      /// modules, and this feature mounted by another host, never share a value.
+      \(access)final class RouteSet: _RouteEnvironmentObject {
+        let tree: RouteTree<\(root)>
+        \(access)let handles: Handles
+
+        /// Creates the route set for the handles `_register(into:under:wrap:)` returned, in the
+        /// tree the host built after registering them. Generated host route sets call this.
+        \(access)init(_mountedIn tree: RouteTree<\(root)>, handles: Handles) {
+          self.tree = tree
+          self.handles = handles
+        }
+
+      \(factories)
+      }
+    """
+}
+
+/// Registers the feature's layouts and routes below a host mount record.
+///
+/// Feature records read their contexts from the end of the match stack, because the host's
+/// layouts and mount record come first. `wrap` places the feature's view into the host's view.
+private func featureRegistrationDeclaration(
+  access: String,
+  root: String,
+  hierarchy: RouteHierarchy
+) -> String {
+  let layouts = hierarchy.layouts
+  let layoutRegistrations = layouts.enumerated()
+    .sorted { ($0.element.depth, $0.offset) < ($1.element.depth, $1.offset) }
+    .map { entry in
+      layoutRegistration(
+        entry.element,
+        parent: hierarchy.parent(ofLayout: entry.element),
+        topLevelParent: "mount"
+      )
+    }
+  let registrations = hierarchy.routes.map {
+    leafRegistration($0, hierarchy: hierarchy, isFeature: true)
+  }
+  let handles = (layouts + hierarchy.routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
+
+  return """
+      /// Registers this feature's layouts and routes below `mount` in a host route builder.
+      ///
+      /// `mount` is a layout record the host registered at a static path. `wrap` places the
+      /// feature's view into the host's root view; it receives the contexts of the whole match
+      /// stack, outermost host layout first. Generated hosts call this for each `@Mount`.
+      \(access)static func _register(
+        into collection: RouteBuilder<\(root)>,
+        under mount: RouteHandle,
+        wrap: @escaping (RouteView, [RouteContext]) -> \(root)
+      ) -> Handles {
+        \(layoutRegistrations.joined(separator: "\n"))
+        \(registrations.joined(separator: "\n"))
+        return Handles(\(handles))
+      }
+    """
 }
 
 /// Forwards to the expansion context and records which declarations were diagnosed.
@@ -199,6 +396,10 @@ private final class DiagnosedDeclarations<Base: MacroExpansionContext>: MacroExp
 
   func isValid(_ declaration: RouteDeclaration) -> Bool {
     !nodes.contains(declaration.function.id)
+  }
+
+  func isValid(_ mount: MountDeclaration) -> Bool {
+    !nodes.contains(mount.alias.id)
   }
 
   var lexicalContext: [Syntax] {
@@ -261,6 +462,183 @@ private struct RouteDeclaration {
 
   var normalizedPath: String {
     RoutePath(path).normalized
+  }
+}
+
+/// A feature mounted by a host with `@Mount("/path") typealias Name = Feature<RouteView>`.
+private struct MountDeclaration {
+  let alias: TypeAliasDeclSyntax
+  let path: String
+  /// The feature type without generic arguments, such as `ShopRoutes` or `Shop.ShopRoutes`.
+  let featureTypeName: String
+
+  /// The name of the mount's handle and route set property: the alias with a lowercase initial.
+  var name: String {
+    let aliasName = alias.name.text
+    return aliasName.prefix(1).lowercased() + String(aliasName.dropFirst())
+  }
+
+  var depth: Int {
+    RoutePath(path).segments.count
+  }
+
+  var normalizedPath: String {
+    RoutePath(path).normalized
+  }
+
+  /// The feature specialized with the host's route view, such as
+  /// `ShopRoutes<AppRoutes.RouteView>`.
+  func featureType(in containerName: String) -> String {
+    "\(featureTypeName)<\(containerName).RouteView>"
+  }
+}
+
+/// Reads a `@Mount` type alias, reporting a path or type the host cannot mount.
+private func parseMount(
+  _ alias: TypeAliasDeclSyntax,
+  path: String,
+  containerName: String,
+  context: some MacroExpansionContext
+) -> MountDeclaration? {
+  func diagnose(_ message: RoutesDiagnostic) {
+    context.diagnose(.init(node: Syntax(alias), message: message))
+  }
+
+  let type = alias.initializer.value
+  var featureTypeName: String?
+  var arguments: GenericArgumentClauseSyntax?
+  if let identifier = type.as(IdentifierTypeSyntax.self) {
+    featureTypeName = identifier.name.text
+    arguments = identifier.genericArgumentClause
+  } else if let member = type.as(MemberTypeSyntax.self) {
+    featureTypeName = member.baseType.trimmedDescription + "." + member.name.text
+    arguments = member.genericArgumentClause
+  }
+
+  var argument = arguments?.arguments.first?.trimmedDescription ?? ""
+  if argument.hasSuffix(",") {
+    argument.removeLast()
+  }
+  guard alias.genericParameterClause == nil, let featureTypeName,
+    arguments?.arguments.count == 1,
+    argument == "RouteView" || argument == "\(containerName).RouteView"
+  else {
+    diagnose(.mountRequiresFeatureType)
+    return nil
+  }
+
+  var isValid = true
+  for segment in RoutePath(path).segments {
+    if segment == "*" || segment.first == ":" {
+      diagnose(.mountRequiresStaticPath(path: RoutePath(path).normalized))
+      isValid = false
+      break
+    }
+    let decoded = percentDecoded(segment)
+    if decoded == "." || decoded == ".." {
+      diagnose(.dotSegment(segment: segment))
+      isValid = false
+    }
+  }
+
+  return isValid
+    ? MountDeclaration(alias: alias, path: path, featureTypeName: featureTypeName) : nil
+}
+
+/// Rejects mounts that would conflict with each other or with the host's own declarations.
+///
+/// A mounted feature owns every URL below its path, and the host macro cannot see the feature's
+/// routes. Rejecting host routes, nested host layouts, and other mounts inside a mount's path
+/// therefore rules out every route that could match the same URLs as a feature route. A layout
+/// wrapping a mount must not need a required query, because the feature's destination factories
+/// cannot supply it.
+private func validateMounts(
+  _ mounts: [MountDeclaration],
+  in hierarchy: RouteHierarchy,
+  declaredNames: [String],
+  context: some MacroExpansionContext
+) {
+  // Whether two mounts name one feature type cannot be decided from spellings: aliases and module
+  // names can spell one type differently, and unrelated modules can declare features with one
+  // name. Generated `routes()` compares the specialized route set types instead.
+  var names = Set(declaredNames)
+
+  for (index, mount) in mounts.enumerated() {
+    func diagnose(_ message: RoutesDiagnostic) {
+      context.diagnose(.init(node: Syntax(mount.alias), message: message))
+    }
+
+    if reservedDeclarationNames.contains(mount.name) || reservedRouteSetNames.contains(mount.name) {
+      diagnose(.reservedGeneratedName(name: mount.name))
+    } else if !names.insert(mount.name).inserted {
+      diagnose(.duplicateName(name: mount.name))
+    }
+
+    let path = RoutePath(mount.path)
+    for earlier in mounts[..<index] {
+      let other = RoutePath(earlier.path)
+      if path.hasSegmentPrefix(other) || other.hasSegmentPrefix(path) {
+        diagnose(.overlappingMount(path: mount.normalizedPath, otherPath: earlier.normalizedPath))
+      }
+    }
+
+    for layout in hierarchy.ancestors(ofMount: mount) {
+      for query in layout.queryParameters where query.queryDefaultValue == nil {
+        diagnose(.mountRequiredLayoutQuery(mount: mount.name, layout: layout.name, query: query.label))
+      }
+    }
+  }
+
+  for route in hierarchy.routes {
+    let path = RoutePath(route.path)
+    if let mount = mounts.first(where: { path.hasSegmentPrefix(RoutePath($0.path)) }) {
+      context.diagnose(
+        .init(
+          node: Syntax(route.function),
+          message: RoutesDiagnostic.declarationInsideMount(
+            path: route.normalizedPath,
+            mount: mount.name,
+            mountPath: mount.normalizedPath
+          )
+        )
+      )
+    }
+  }
+
+  // A layout at exactly a mount's path wraps the mount; a deeper one would wrap feature routes.
+  for layout in hierarchy.layouts {
+    let path = RoutePath(layout.path)
+    if let mount = mounts.first(where: {
+      layout.depth > $0.depth && path.hasSegmentPrefix(RoutePath($0.path))
+    }) {
+      context.diagnose(
+        .init(
+          node: Syntax(layout.function),
+          message: RoutesDiagnostic.declarationInsideMount(
+            path: layout.normalizedPath,
+            mount: mount.name,
+            mountPath: mount.normalizedPath
+          )
+        )
+      )
+    }
+  }
+}
+
+/// Names a feature declaration may not use, because `_register(into:under:wrap:)` binds them.
+private let reservedFeatureNames: Set<String> = ["mount", "wrap"]
+
+private func validateFeatureNames(
+  _ declarations: [RouteDeclaration],
+  context: some MacroExpansionContext
+) {
+  for declaration in declarations where reservedFeatureNames.contains(declaration.name) {
+    context.diagnose(
+      .init(
+        node: Syntax(declaration.function),
+        message: RoutesDiagnostic.reservedGeneratedName(name: declaration.name)
+      )
+    )
   }
 }
 
@@ -702,6 +1080,7 @@ private func validateNames(in hierarchy: RouteHierarchy, context: some MacroExpa
 private struct RouteHierarchy {
   let routes: [RouteDeclaration]
   let layouts: [RouteDeclaration]
+  var mounts: [MountDeclaration] = []
 
   /// One entry of a generated storage enum: a layout with its outlet, or a leaf route.
   struct Node {
@@ -737,11 +1116,35 @@ private struct RouteHierarchy {
     return chain.reversed()
   }
 
-  /// Names of the layouts that wrap at least one route.
+  /// The innermost layout that wraps `mount`, including a layout at exactly the mount's path.
+  func parent(ofMount mount: MountDeclaration) -> RouteDeclaration? {
+    matchingLayouts(forPath: mount.path, layouts: layouts).last
+  }
+
+  /// The layouts that wrap `mount`, from outermost to innermost.
+  func ancestors(ofMount mount: MountDeclaration) -> [RouteDeclaration] {
+    var chain: [RouteDeclaration] = []
+    var current = parent(ofMount: mount)
+    while let layout = current {
+      chain.append(layout)
+      current = parent(ofLayout: layout)
+    }
+    return chain.reversed()
+  }
+
+  /// The mounts directly inside `layout`, or the top-level mounts for `nil`.
+  func mounts(in layout: RouteDeclaration?) -> [MountDeclaration] {
+    mounts.filter { parent(ofMount: $0)?.name == layout?.name }
+  }
+
+  /// Names of the layouts that wrap at least one route or mount.
   ///
   /// Other layouts never join a match stack, so they get no storage case or outlet view.
   var renderedLayoutNames: Set<String> {
-    Set(routes.flatMap { ancestors(ofRoute: $0).map(\.name) })
+    Set(
+      routes.flatMap { ancestors(ofRoute: $0).map(\.name) }
+        + mounts.flatMap { ancestors(ofMount: $0).map(\.name) }
+    )
   }
 
   var renderedLayouts: [RouteDeclaration] {
@@ -773,7 +1176,11 @@ private func outletTypeName(for layout: RouteDeclaration) -> String {
 private func matchingLayouts(for route: RouteDeclaration, layouts: [RouteDeclaration])
   -> [RouteDeclaration]
 {
-  let path = RoutePath(route.path)
+  matchingLayouts(forPath: route.path, layouts: layouts)
+}
+
+private func matchingLayouts(forPath path: String, layouts: [RouteDeclaration]) -> [RouteDeclaration] {
+  let path = RoutePath(path)
   return
     layouts
     .filter { path.hasSegmentPrefix(RoutePath($0.path)) }
@@ -792,49 +1199,73 @@ private func enclosingLayout(for layout: RouteDeclaration, layouts: [RouteDeclar
 }
 
 private func relativePath(for route: RouteDeclaration, under layout: RouteDeclaration?) -> String {
+  relativePath(route.path, under: layout)
+}
+
+private func relativePath(_ path: String, under layout: RouteDeclaration?) -> String {
   guard let layout else {
-    return route.path
+    return path
   }
 
-  let remaining = RoutePath(route.path).segments.dropFirst(layout.depth)
+  let remaining = RoutePath(path).segments.dropFirst(layout.depth)
   return remaining.isEmpty ? "/" : remaining.joined(separator: "/")
 }
 
+/// The storage case of a mount, which holds the mounted feature's route view.
+private func mountCaseDeclaration(_ mount: MountDeclaration, containerName: String) -> String {
+  "case \(mount.name)(\(mount.featureType(in: containerName)).RouteView)"
+}
+
+private func mountSwitchCase(_ mount: MountDeclaration) -> String {
+  """
+  case .\(mount.name)(let content):
+    content
+  """
+}
+
+/// `containerName` names the declaring type; `containerReference` is the expression that calls
+/// its route functions, which is the type specialized with its root for a feature.
 private func routeViewDeclaration(
   access: String,
   containerName: String,
+  containerReference: String,
   hierarchy: RouteHierarchy,
   notFound: FunctionDeclSyntax?,
   routeError: FunctionDeclSyntax?
 ) -> String {
   let topLevel = hierarchy.children(of: nil)
+  let topLevelMounts = hierarchy.mounts(in: nil)
   let cases =
     topLevel.map(storageCaseDeclaration)
+    + topLevelMounts.map { mountCaseDeclaration($0, containerName: containerName) }
     + (notFound == nil ? [] : ["case notFound(RouteNotFoundContext)"])
     + (routeError == nil ? [] : ["case routeError(RouteErrorContext)"])
 
   let notFoundSwitch = notFound.map { function in
     """
     case .notFound(let context):
-      \(containerName).\(function.name.text)(context: context)
+      \(containerReference).\(function.name.text)(context: context)
     """
   }
   let errorSwitch = routeError.map { function in
     """
     case .routeError(let context):
-      \(containerName).\(function.name.text)(context: context)
+      \(containerReference).\(function.name.text)(context: context)
     """
   }
   let switchCases =
-    topLevel.map { storageSwitchCase(containerName: containerName, node: $0) }
+    topLevel.map { storageSwitchCase(containerName: containerReference, node: $0) }
+    + topLevelMounts.map(mountSwitchCase)
     + [notFoundSwitch, errorSwitch].compactMap { $0 }
 
   let outlets = hierarchy.renderedLayouts.map { layout in
     outletStorageDeclaration(
       access: access,
       containerName: containerName,
+      containerReference: containerReference,
       layout: layout,
-      children: hierarchy.children(of: layout)
+      children: hierarchy.children(of: layout),
+      mounts: hierarchy.mounts(in: layout)
     )
   }
 
@@ -874,11 +1305,17 @@ private func routeViewDeclaration(
 private func outletStorageDeclaration(
   access: String,
   containerName: String,
+  containerReference: String,
   layout: RouteDeclaration,
-  children: [RouteHierarchy.Node]
+  children: [RouteHierarchy.Node],
+  mounts: [MountDeclaration]
 ) -> String {
-  let cases = children.map(storageCaseDeclaration)
-  let switchCases = children.map { storageSwitchCase(containerName: containerName, node: $0) }
+  let cases =
+    children.map(storageCaseDeclaration)
+    + mounts.map { mountCaseDeclaration($0, containerName: containerName) }
+  let switchCases =
+    children.map { storageSwitchCase(containerName: containerReference, node: $0) }
+    + mounts.map(mountSwitchCase)
 
   return """
     /// The matched child of the `\(layout.name)` layout.
@@ -950,14 +1387,16 @@ private func storageSwitchCase(containerName: String, node: RouteHierarchy.Node)
 private func handlesDeclaration(
   access: String,
   routes: [RouteDeclaration],
-  layouts: [RouteDeclaration]
+  layouts: [RouteDeclaration],
+  mounts: [MountDeclaration]
 ) -> String {
-  let allRoutes = layouts + routes
-  let properties = allRoutes.map { "\(access)let \($0.name): RouteHandle" }.joined(
+  // A mount's handle is its mount record, so `.descendant` checks cover the whole feature.
+  let names = layouts.map(\.name) + mounts.map(\.name) + routes.map(\.name)
+  let properties = names.map { "\(access)let \($0): RouteHandle" }.joined(
     separator: "\n    "
   )
-  let arguments = allRoutes.map { "\($0.name): RouteHandle" }.joined(separator: ", ")
-  let assignments = allRoutes.map { "self.\($0.name) = \($0.name)" }.joined(separator: "\n      ")
+  let arguments = names.map { "\($0): RouteHandle" }.joined(separator: ", ")
+  let assignments = names.map { "self.\($0) = \($0)" }.joined(separator: "\n      ")
 
   return """
       \(access)struct Handles {
@@ -988,15 +1427,28 @@ private func routeSetDeclaration(
   .joined(separator: "\n\n")
   let routerType = routerType(mode: mode, routeViewType: "RouteView")
   let routerInitializer = routerInitializer(mode: mode, treeName: "tree")
+  let mounts = hierarchy.mounts
+  let mountProperties = mounts.map { mount in
+    """
+    /// The routes of the feature mounted at `\(mount.normalizedPath)`, in this route set's tree.
+        \(access)let \(mount.name): \(mount.featureType(in: containerName)).RouteSet
+    """
+  }
+  let mountParameters = mounts.map { ", \($0.name): \($0.featureType(in: containerName)).Handles" }
+  let mountAssignments = mounts.map { mount in
+    "self.\(mount.name) = \(mount.featureType(in: containerName)).RouteSet(_mountedIn: tree, handles: \(mount.name))"
+  }
 
   return """
       \(access)struct RouteSet {
         let tree: RouteTree<RouteView>
         \(access)let handles: Handles
+        \(mountProperties.joined(separator: "\n    "))
 
-        init(tree: RouteTree<RouteView>, handles: Handles) {
+        init(tree: RouteTree<RouteView>, handles: Handles\(mountParameters.joined())) {
           self.tree = tree
           self.handles = handles
+          \(mountAssignments.joined(separator: "\n      "))
         }
 
         \(access)func router() -> \(routerType) {
@@ -1168,7 +1620,8 @@ private func destinationFactoryDeclaration(
   access: String,
   containerName: String,
   route: RouteDeclaration,
-  hierarchy: RouteHierarchy
+  hierarchy: RouteHierarchy,
+  contentType: String = "RouteView"
 ) -> String {
   let pathParameters = route.storageParameters.filter {
     $0.kind == .path || $0.kind == .wildcard
@@ -1203,7 +1656,7 @@ private func destinationFactoryDeclaration(
 
   if hasInfallibleDestination(route, queries: queries) {
     return """
-        \(access)func \(route.name)(\(signatureParameters)) -> RouteDestination<RouteView> {
+        \(access)func \(route.name)(\(signatureParameters)) -> RouteDestination<\(contentType)> {
           do throws(RouteMatchError) {
             return \(build)
           } catch {
@@ -1214,7 +1667,7 @@ private func destinationFactoryDeclaration(
   }
 
   return """
-      \(access)func \(route.name)(\(signatureParameters)) throws(RouteMatchError) -> RouteDestination<RouteView> {
+      \(access)func \(route.name)(\(signatureParameters)) throws(RouteMatchError) -> RouteDestination<\(contentType)> {
         \(build)
       }
     """
@@ -1223,9 +1676,16 @@ private func destinationFactoryDeclaration(
 private func providerDeclaration(
   access: String,
   mode: RoutesMode,
-  containerName: String
+  containerName: String,
+  mounts: [MountDeclaration]
 ) -> String {
   let router = routerType(mode: mode, routeViewType: "RouteView")
+  // Mounted features and `RouteLink` only know the route view type, so they read the router
+  // through its navigator and each feature reads its own route set. Both are identified by their
+  // type, which includes this route set's view.
+  let mountEnvironment = mounts.map { mount in
+    "\n      .environment(routes.\(mount.name))"
+  }
 
   return """
       @View
@@ -1247,6 +1707,7 @@ private func providerDeclaration(
         \(access)var body: some View {
           content.environment(\(containerName)._routerEnvironmentKey, router)
             .environment(\(containerName)._routeSetEnvironmentKey, routes)
+            .environment(router.navigator)\(mountEnvironment.joined())
         }
       }
     """
@@ -1439,19 +1900,34 @@ private func routeSetEnvironmentKeyDeclaration(containerName: String) -> String 
 
 private func routesFunctionDeclaration(
   access: String,
+  containerName: String,
   hierarchy: RouteHierarchy,
+  mountHandleNames: [String: String],
   notFound: FunctionDeclSyntax?,
   routeError: FunctionDeclSyntax?
 ) -> String {
   let routes = hierarchy.routes
   let layouts = hierarchy.layouts
+  let mounts = hierarchy.mounts
   // Register outer layouts first so each nested layout can reference its parent handle.
   let layoutRegistrations = layouts.enumerated()
     .sorted { ($0.element.depth, $0.offset) < ($1.element.depth, $1.offset) }
     .map { entry in
-      layoutRegistration(entry.element, parent: hierarchy.parent(ofLayout: entry.element))
+      layoutRegistration(
+        entry.element,
+        parent: hierarchy.parent(ofLayout: entry.element),
+        topLevelParent: "nil"
+      )
     }
-  let registrations = routes.map { leafRegistration($0, hierarchy: hierarchy) }
+  let mountRegistrations = mounts.map { mount in
+    mountRegistration(
+      mount,
+      hierarchy: hierarchy,
+      containerName: containerName,
+      handlesName: mountHandleNames[mount.name] ?? "\(mount.name)Handles"
+    )
+  }
+  let registrations = routes.map { leafRegistration($0, hierarchy: hierarchy, isFeature: false) }
 
   let notFoundRegistration = notFound.map { function in
     """
@@ -1469,18 +1945,63 @@ private func routesFunctionDeclaration(
     """
   }
 
-  let handles = (layouts + routes).map { "\($0.name): \($0.name)" }.joined(separator: ", ")
+  let handleNames = layouts.map(\.name) + mounts.map(\.name) + routes.map(\.name)
+  let handles = handleNames.map { "\($0): \($0)" }.joined(separator: ", ")
+  let mountArguments = mounts.map { mount in
+    ",\n      \(mount.name): \(mountHandleNames[mount.name] ?? "\(mount.name)Handles")"
+  }
+  // Spellings cannot tell whether two aliases name one feature type, so the specialized route
+  // set types are compared before anything is registered.
+  let featureIdentities = mounts.map { mount in
+    "(identity: \(mount.featureType(in: containerName)).RouteSet._environmentIdentity, path: \"\(mount.normalizedPath)\")"
+  }
+  let distinctFeatureCheck =
+    featureIdentities.count < 2
+    ? ""
+    : "try RouteBuilder<RouteView>._checkDistinctFeatures([\(featureIdentities.joined(separator: ", "))])"
   return """
       \(access)static func routes() throws(RouteTreeError) -> RouteSet {
+        \(distinctFeatureCheck)
         let collection = RouteBuilder<RouteView>()
         \(layoutRegistrations.joined(separator: "\n"))
+        \(mountRegistrations.joined(separator: "\n"))
         \(registrations.joined(separator: "\n"))
         \([notFoundRegistration, errorRegistration].compactMap { $0 }.joined(separator: "\n"))
         return RouteSet(
           tree: try collection._build(),
-          handles: Handles(\(handles))
+          handles: Handles(\(handles))\(mountArguments.joined())
         )
       }
+    """
+}
+
+/// Registers a mount record at the mount's static path and the mounted feature below it.
+///
+/// The wrapper builds the host's view around the feature's view, with each enclosing host layout
+/// reading its values from its own context. Host layouts lead the match stack, so they read their
+/// contexts from the start of it, as the host's own routes do.
+private func mountRegistration(
+  _ mount: MountDeclaration,
+  hierarchy: RouteHierarchy,
+  containerName: String,
+  handlesName: String
+) -> String {
+  let ancestors = hierarchy.ancestors(ofMount: mount)
+  var usesContexts = false
+  let storage = wrappingLayouts(
+    ".\(mount.name)(content)",
+    in: ancestors,
+    context: { "contexts[\($0)]" },
+    usesContexts: &usesContexts
+  )
+  let parameters = usesContexts ? "content, contexts" : "content, _"
+  let parent = registrationParent(parent: ancestors.last, topLevelParent: "nil")
+
+  return """
+    let \(mount.name) = collection._generatedLayout("\(relativePath(mount.path, under: ancestors.last))", parent: \(parent), decode: { _ in })
+    let \(handlesName) = \(mount.featureType(in: containerName))._register(into: collection, under: \(mount.name), wrap: { \(parameters) in
+      RouteView(storage: \(storage))
+    })
     """
 }
 
@@ -1506,15 +2027,7 @@ private func parseRoutesMode(
   from node: AttributeSyntax,
   context: some MacroExpansionContext
 ) -> RoutesMode {
-  guard case .argumentList(let arguments) = node.arguments else {
-    return .path
-  }
-
-  guard
-    let modeArgument = arguments.first(where: { argument in
-      argument.label?.text == "mode"
-    })
-  else {
+  guard let modeArgument = node.modeArgument else {
     return .path
   }
 
@@ -1536,9 +2049,12 @@ private func parseRoutesMode(
 ///
 /// Decoding runs before any descendant renders, so a failure is reported with the layout's
 /// context. Values that cannot fail, such as defaulted queries, are not decoded here.
+/// `topLevelParent` is the parent of a layout that no other layout wraps: `nil` for a route set,
+/// or the mount record for a feature.
 private func layoutRegistration(
   _ layout: RouteDeclaration,
-  parent: RouteDeclaration?
+  parent: RouteDeclaration?,
+  topLevelParent: String
 ) -> String {
   let decodes = layout.parameters.compactMap { parameter -> String? in
     guard parameter.kind != .context, let value = parameter.decodedValue(from: "context"),
@@ -1557,8 +2073,9 @@ private func layoutRegistration(
     }
     """
 
+  let registeredParent = registrationParent(parent: parent, topLevelParent: topLevelParent)
   return """
-    let \(layout.name) = collection._generatedLayout("\(relativePath(for: layout, under: parent))", parent: \(registrationParent(parent: parent)), decode: \(decode))
+    let \(layout.name) = collection._generatedLayout("\(relativePath(for: layout, under: parent))", parent: \(registeredParent), decode: \(decode))
     """
 }
 
@@ -1567,47 +2084,89 @@ private func layoutRegistration(
 /// The match stack holds one context per enclosing layout, outermost first, followed by the
 /// route's own context. Each layout's values, defaults, and `RouteContext` come from its own
 /// context, so a layout never receives a value decoded for the route or another layout.
+///
+/// A feature's records follow the host's layouts and mount record in the stack, so a feature
+/// reads its contexts from the end of the stack and passes the built view to `wrap`.
 private func leafRegistration(
   _ route: RouteDeclaration,
-  hierarchy: RouteHierarchy
+  hierarchy: RouteHierarchy,
+  isFeature: Bool
 ) -> String {
   let ancestors = hierarchy.ancestors(ofRoute: route)
-  var usesContexts = false
-
-  func storageValue(
-    _ declaration: RouteDeclaration,
-    contextIndex: Int,
-    outlet: String?
-  ) -> String {
-    let arguments = declaration.parameters.map { parameter in
-      guard let value = parameter.decodedValue(from: "contexts[\(contextIndex)]") else {
-        return "\(parameter.label): \(outlet ?? "")"
-      }
-      usesContexts = true
-      return "\(parameter.label): \(value)"
-    }
-    return arguments.isEmpty
-      ? ".\(declaration.name)"
-      : ".\(declaration.name)(\(arguments.joined(separator: ", ")))"
+  let depth = ancestors.count + 1
+  func contextExpression(_ index: Int) -> String {
+    isFeature ? "contexts[contexts.count - \(depth - index)]" : "contexts[\(index)]"
   }
 
-  var storage = storageValue(route, contextIndex: ancestors.count, outlet: nil)
-  for (index, layout) in ancestors.enumerated().reversed() {
-    let outlet = "_RouteOutlet<RouteView.\(outletTypeName(for: layout))>(storage: \(storage))"
-    storage = storageValue(layout, contextIndex: index, outlet: outlet)
-  }
+  var usesContexts = isFeature
+  let leaf = storageValue(
+    route,
+    context: contextExpression(ancestors.count),
+    outlet: nil,
+    usesContexts: &usesContexts
+  )
+  let storage = wrappingLayouts(
+    leaf,
+    in: ancestors,
+    context: contextExpression,
+    usesContexts: &usesContexts
+  )
 
   let parameter = usesContexts ? "contexts throws(RouteValueError)" : "_"
+  let view = "RouteView(storage: \(storage))"
+  let parent = registrationParent(parent: ancestors.last, topLevelParent: isFeature ? "mount" : "nil")
   return """
-    let \(route.name) = collection._generatedRoute("\(relativePath(for: route, under: ancestors.last))", parent: \(registrationParent(parent: ancestors.last)), render: { \(parameter) in
-      RouteView(storage: \(storage))
+    let \(route.name) = collection._generatedRoute("\(relativePath(for: route, under: ancestors.last))", parent: \(parent), render: { \(parameter) in
+      \(isFeature ? "wrap(\(view), contexts)" : view)
     })
     """
 }
 
-private func registrationParent(parent: RouteDeclaration?) -> String {
+/// The storage value of a route or layout, with each value decoded from `context`.
+///
+/// A layout's outlet parameter receives `outlet`. `usesContexts` is set when a value is read.
+private func storageValue(
+  _ declaration: RouteDeclaration,
+  context: String,
+  outlet: String?,
+  usesContexts: inout Bool
+) -> String {
+  var readsContext = false
+  let arguments = declaration.parameters.map { parameter in
+    guard let value = parameter.decodedValue(from: context) else {
+      return "\(parameter.label): \(outlet ?? "")"
+    }
+    readsContext = true
+    return "\(parameter.label): \(value)"
+  }
+  if readsContext {
+    usesContexts = true
+  }
+  return arguments.isEmpty
+    ? ".\(declaration.name)"
+    : ".\(declaration.name)(\(arguments.joined(separator: ", ")))"
+}
+
+/// Wraps `storage` in the storage values of `ancestors`, from the innermost layout out.
+///
+/// `context` returns the context expression of the layout at an index of `ancestors`.
+private func wrappingLayouts(
+  _ storage: String,
+  in ancestors: [RouteDeclaration],
+  context: (Int) -> String,
+  usesContexts: inout Bool
+) -> String {
+  var storage = storage
+  for (index, layout) in ancestors.enumerated().reversed() {
+    let outlet = "_RouteOutlet<RouteView.\(outletTypeName(for: layout))>(storage: \(storage))"
+    storage = storageValue(layout, context: context(index), outlet: outlet, usesContexts: &usesContexts)
+  }
+  return storage
+}
+
+private func registrationParent(parent: RouteDeclaration?, topLevelParent: String) -> String {
   guard let parent else {
-    return "nil"
+    return topLevelParent
   }
   return parent.name
 }
@@ -1630,7 +2189,19 @@ extension FunctionDeclSyntax {
       modifier.name.text == "static"
     }
   }
+}
 
+extension AttributeSyntax {
+  /// The `mode:` argument of a `@Routes` attribute, if any.
+  fileprivate var modeArgument: LabeledExprSyntax? {
+    guard case .argumentList(let arguments) = arguments else {
+      return nil
+    }
+    return arguments.first { $0.label?.text == "mode" }
+  }
+}
+
+extension WithAttributesSyntax {
   fileprivate func hasAttribute(named expectedName: String) -> Bool {
     attributes.contains { element in
       guard case .attribute(let attribute) = element else {
@@ -1710,6 +2281,16 @@ private enum RoutesDiagnostic: DiagnosticMessage {
     secondType: String
   )
   case queryPathConflict(name: String, owner: String, route: String)
+  case featureGenericParameters
+  case featureMode
+  case featureFallback
+  case featureMount
+  case mountRequiresStringLiteral
+  case mountRequiresFeatureType
+  case mountRequiresStaticPath(path: String)
+  case mountRequiredLayoutQuery(mount: String, layout: String, query: String)
+  case overlappingMount(path: String, otherPath: String)
+  case declarationInsideMount(path: String, mount: String, mountPath: String)
 
   var message: String {
     switch self {
@@ -1771,6 +2352,26 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "Query `\(name)` is declared as `\(firstType)` by `\(firstOwner)` and as `\(secondType)` by `\(secondOwner)`; a route and its layouts share one query value, so they must declare it with one type."
     case .queryPathConflict(let name, let owner, let route):
       "Query `\(name)` of layout `\(owner)` has the same name as a path or wildcard parameter of route `\(route)`, so the route's destination factory cannot take both."
+    case .featureGenericParameters:
+      "A feature `@Routes` struct must declare exactly one generic parameter for the host route view, such as `<Root: View>`."
+    case .featureMode:
+      "Features cannot choose a routing mode; the host `@Routes` that mounts the feature owns it."
+    case .featureFallback:
+      "Features cannot declare `@NotFound` or `@RouteError`; the host `@Routes` that mounts the feature owns fallback policy."
+    case .featureMount:
+      "Features cannot mount other features; mount every feature in the host `@Routes`."
+    case .mountRequiresStringLiteral:
+      "`@Mount` requires a string literal path."
+    case .mountRequiresFeatureType:
+      "`@Mount` type aliases must name a feature specialized with this route set's view, such as `typealias Shop = ShopRoutes<RouteView>`."
+    case .mountRequiresStaticPath(let path):
+      "Mount path `\(path)` must be static; `:` parameters and `*` wildcards are not supported in mount paths."
+    case .mountRequiredLayoutQuery(let mount, let layout, let query):
+      "Mount `\(mount)` is wrapped by layout `\(layout)`, whose query `\(query)` has no default; the mounted feature's destinations cannot supply it."
+    case .overlappingMount(let path, let otherPath):
+      "Mount path `\(path)` overlaps mount path `\(otherPath)`; each mounted feature owns every URL below its path."
+    case .declarationInsideMount(let path, let mount, let mountPath):
+      "Route path `\(path)` is inside mount `\(mount)` at `\(mountPath)`; the mounted feature owns every URL below its path."
     }
   }
 

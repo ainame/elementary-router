@@ -9,5 +9,6 @@ struct ElementaryRouterPlugin: CompilerPlugin {
     LayoutMacro.self,
     NotFoundMacro.self,
     RouteErrorMacro.self,
+    MountMacro.self,
   ]
 }

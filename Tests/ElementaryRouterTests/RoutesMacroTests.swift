@@ -12,6 +12,7 @@ private let testMacros: [String: Macro.Type] = [
   "Layout": LayoutMacro.self,
   "NotFound": NotFoundMacro.self,
   "RouteError": RouteErrorMacro.self,
+  "Mount": MountMacro.self,
 ]
 
 final class RoutesMacroTests: XCTestCase {
@@ -1004,6 +1005,379 @@ final class RoutesMacroTests: XCTestCase {
       XCTAssertTrue(source.contains("supplied?.routes ?? session.routes"), source)
       XCTAssertTrue(source.contains("supplied?.router ?? session.router"), source)
     }
+  }
+
+  func testFeatureRoutesGenerateHostRegistrationAndRootTypedFactories() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      public struct ShopRoutes<Root: View> {
+        @Layout("/")
+        public static func shell<Content: View>(outlet: Outlet<Content>) -> ShopShell<Root, Content> {
+          ShopShell(outlet: outlet)
+        }
+
+        @Route("/")
+        public static func catalog(sort: Query<String> = Query("name")) -> CatalogPage<Root> {
+          CatalogPage(sort: sort.value)
+        }
+
+        @Route("/products/:id")
+        public static func product(id: Int) -> ProductPage<Root> {
+          ProductPage(id: id)
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    let source = expansion.source
+
+    // The feature registers below a host mount record and wraps its view into the host's root.
+    XCTAssertTrue(source.contains("public static func _register("), source)
+    XCTAssertTrue(source.contains("into collection: RouteBuilder<Root>,"), source)
+    XCTAssertTrue(source.contains("under mount: RouteHandle,"), source)
+    XCTAssertTrue(source.contains("wrap: @escaping (RouteView, [RouteContext]) -> Root"), source)
+    XCTAssertTrue(
+      source.contains(#"let shell = collection._generatedLayout("/", parent: mount, decode: { _ in })"#),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(
+        #"let product = collection._generatedRoute("products/:id", parent: shell, render: { contexts throws(RouteValueError) in"#
+      ),
+      source
+    )
+    // Host layouts and the mount record lead the match stack, so feature values are read from
+    // the end of it.
+    XCTAssertTrue(
+      source.contains(
+        #"wrap(RouteView(storage: .shell(outlet: _RouteOutlet<RouteView.ShellOutlet>(storage: .product(id: try contexts[contexts.count - 1].params.require("id", Int.self))))), contexts)"#
+      ),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(#".catalog(sort: contexts[contexts.count - 1].query.get("sort", String.self) ?? "name")"#),
+      source
+    )
+    XCTAssertTrue(source.contains("ShopRoutes<Root>.product(id: value0)"), source)
+
+    // Destinations belong to the host tree, so they are typed by the host root.
+    XCTAssertTrue(
+      source.contains(
+        #"public func product(id: Int, hash: String = "") throws(RouteMatchError) -> RouteDestination<Root> {"#
+      ),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(#"public func catalog(sort: String? = nil, hash: String = "") -> RouteDestination<Root> {"#),
+      source
+    )
+    XCTAssertTrue(source.contains("public init(_mountedIn tree: RouteTree<Root>, handles: Handles) {"), source)
+    XCTAssertTrue(
+      source.contains("public final class RouteSet: _RouteEnvironmentObject {"),
+      source
+    )
+
+    // The host owns routers, providers, links, and fallbacks.
+    XCTAssertFalse(source.contains("func router()"), source)
+    XCTAssertFalse(source.contains("struct Provider"), source)
+    XCTAssertFalse(source.contains("struct RouterView"), source)
+    XCTAssertFalse(source.contains("struct Link"), source)
+    XCTAssertFalse(source.contains("static func routes()"), source)
+    XCTAssertFalse(source.contains("_routerEnvironmentKey"), source)
+  }
+
+  func testFeatureRoutesRejectHostOwnedDeclarations() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes(mode: .hash)
+      struct ShopRoutes<Root: View> {
+        @Route("/")
+        static func wrap() -> Page {
+          Page()
+        }
+
+        @Mount("/deals")
+        typealias Deals = DealsRoutes<RouteView>
+
+        @NotFound
+        static func notFound(context: RouteNotFoundContext) -> Page {
+          Page()
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(
+      expansion.diagnostics,
+      [
+        "Features cannot choose a routing mode; the host `@Routes` that mounts the feature owns it.",
+        "Features cannot mount other features; mount every feature in the host `@Routes`.",
+        "Features cannot declare `@NotFound` or `@RouteError`; the host `@Routes` that mounts the feature owns fallback policy.",
+        "Route name `wrap` is reserved by generated `@Routes` code.",
+      ]
+    )
+    XCTAssertFalse(expansion.source.contains("let wrap ="), expansion.source)
+
+    let pair = try expandRoutes(
+      """
+      @Routes
+      struct PairRoutes<Root: View, Other: View> {
+        @Route("/")
+        static func home() -> Page {
+          Page()
+        }
+      }
+      """
+    )
+    XCTAssertEqual(
+      pair.diagnostics,
+      [
+        "A feature `@Routes` struct must declare exactly one generic parameter for the host route view, such as `<Root: View>`."
+      ]
+    )
+    XCTAssertEqual(pair.source, "")
+  }
+
+  func testHostMountsGenerateTypedOutletCasesAndRouteSets() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      public struct AppRoutes {
+        @Layout("/")
+        public static func shell<Content: View>(context: RouteContext, outlet: Outlet<Content>) -> Shell<Content> {
+          Shell(outlet: outlet)
+        }
+
+        @Route("/")
+        public static func home() -> HomePage {
+          HomePage()
+        }
+
+        @Mount("/shop")
+        typealias Shop = ShopRoutes<RouteView>
+
+        @Mount("/blog")
+        typealias Blog = Features.BlogRoutes<AppRoutes.RouteView>
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    let source = expansion.source
+
+    // The shell's outlet stores each mounted feature's concrete route view.
+    XCTAssertTrue(source.contains("case shop(ShopRoutes<AppRoutes.RouteView>.RouteView)"), source)
+    XCTAssertTrue(source.contains("case blog(Features.BlogRoutes<AppRoutes.RouteView>.RouteView)"), source)
+    XCTAssertTrue(source.contains("case .shop(let content):"), source)
+
+    // A mount record at the static path, under the typed parent layout, then the feature.
+    XCTAssertTrue(
+      source.contains(#"let shop = collection._generatedLayout("shop", parent: shell, decode: { _ in })"#),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(
+        "ShopRoutes<AppRoutes.RouteView>._register(into: collection, under: shop, wrap: { content, contexts in"
+      ),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(
+        "RouteView(storage: .shell(context: contexts[0], outlet: _RouteOutlet<RouteView.ShellOutlet>(storage: .shop(content))))"
+      ),
+      source
+    )
+
+    // The route set exposes each feature's route set from the same tree, and the mount handle.
+    XCTAssertTrue(source.contains("public let shop: ShopRoutes<AppRoutes.RouteView>.RouteSet"), source)
+    XCTAssertTrue(
+      source.contains("self.shop = ShopRoutes<AppRoutes.RouteView>.RouteSet(_mountedIn: tree, handles: shop)"),
+      source
+    )
+    XCTAssertTrue(source.contains("public let shop: RouteHandle"), source)
+    XCTAssertTrue(source.contains("handles: Handles(shell: shell, shop: shop, blog: blog, home: home)"), source)
+
+    // The provider installs the navigator and each feature's route set for feature views.
+    XCTAssertTrue(
+      source.contains(".environment(router.navigator)"),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(".environment(routes.shop)"),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(
+        ".environment(routes.blog)"
+      ),
+      source
+    )
+
+    // Before registering anything, `routes()` rejects one feature type mounted twice.
+    XCTAssertTrue(
+      source.contains(
+        #"try RouteBuilder<RouteView>._checkDistinctFeatures([(identity: ShopRoutes<AppRoutes.RouteView>.RouteSet._environmentIdentity, path: "/shop"), (identity: Features.BlogRoutes<AppRoutes.RouteView>.RouteSet._environmentIdentity, path: "/blog")])"#
+      ),
+      source
+    )
+    XCTAssertTrue(
+      source.range(of: "_checkDistinctFeatures")!.lowerBound
+        < source.range(of: "let collection = RouteBuilder<RouteView>()")!.lowerBound,
+      source
+    )
+  }
+
+  func testHostMountsRejectOverlapsAndUnsupportedShapes() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      struct AppRoutes {
+        @Layout("/account")
+        static func account<Content: View>(session: Query<String>, outlet: Outlet<Content>) -> Shell<Content> {
+          Shell(outlet: outlet)
+        }
+
+        @Layout("/shop")
+        static func shopFrame<Content: View>(outlet: Outlet<Content>) -> Shell<Content> {
+          Shell(outlet: outlet)
+        }
+
+        @Layout("/shop/admin")
+        static func admin<Content: View>(outlet: Outlet<Content>) -> Shell<Content> {
+          Shell(outlet: outlet)
+        }
+
+        @Route("/shop/cart")
+        static func cart() -> CartPage {
+          CartPage()
+        }
+
+        @Mount("/shop")
+        typealias Shop = ShopRoutes<RouteView>
+
+        @Mount("/shop/deals")
+        typealias Deals = DealsRoutes<RouteView>
+
+        @Mount("/:lang/blog")
+        typealias Blog = BlogRoutes<RouteView>
+
+        @Mount("/news")
+        typealias News = BlogRoutes<OtherRoutes.RouteView>
+
+        @Mount("/journal")
+        typealias Journal = BlogRoutes<RouteView>
+
+        @Mount("/archive")
+        typealias Archive = Features.BlogRoutes<RouteView>
+
+        @Mount("/account/orders")
+        typealias Orders = OrdersRoutes<RouteView>
+      }
+      """
+    )
+
+    XCTAssertEqual(
+      expansion.diagnostics,
+      [
+        "Mount path `/:lang/blog` must be static; `:` parameters and `*` wildcards are not supported in mount paths.",
+        "`@Mount` type aliases must name a feature specialized with this route set's view, such as `typealias Shop = ShopRoutes<RouteView>`.",
+        "Mount path `/shop/deals` overlaps mount path `/shop`; each mounted feature owns every URL below its path.",
+        "Mount `orders` is wrapped by layout `account`, whose query `session` has no default; the mounted feature's destinations cannot supply it.",
+        "Route path `/shop/cart` is inside mount `shop` at `/shop`; the mounted feature owns every URL below its path.",
+        "Route path `/shop/admin` is inside mount `shop` at `/shop`; the mounted feature owns every URL below its path.",
+      ]
+    )
+
+    let source = expansion.source
+    // A host layout at exactly the mount path wraps the mount.
+    XCTAssertTrue(
+      source.contains(#"let shop = collection._generatedLayout("/", parent: shopFrame, decode: { _ in })"#),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(#"let journal = collection._generatedLayout("/journal", parent: nil, decode: { _ in })"#),
+      source
+    )
+    // Diagnosed declarations and mounts generate no code.
+    XCTAssertFalse(source.contains("let cart ="), source)
+    XCTAssertFalse(source.contains("let admin ="), source)
+    XCTAssertFalse(source.contains("let deals ="), source)
+    XCTAssertFalse(source.contains("let blog ="), source)
+    XCTAssertFalse(source.contains("let orders ="), source)
+
+    // Features that share a name are not judged by spelling: `journal` and `archive` may name one
+    // type or types of different modules, so `routes()` compares their specialized types.
+    XCTAssertTrue(
+      source.contains(#"let archive = collection._generatedLayout("/archive", parent: nil, decode: { _ in })"#),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(
+        #"try RouteBuilder<RouteView>._checkDistinctFeatures([(identity: ShopRoutes<AppRoutes.RouteView>.RouteSet._environmentIdentity, path: "/shop"), (identity: BlogRoutes<AppRoutes.RouteView>.RouteSet._environmentIdentity, path: "/journal"), (identity: Features.BlogRoutes<AppRoutes.RouteView>.RouteSet._environmentIdentity, path: "/archive")])"#
+      ),
+      source
+    )
+  }
+
+  func testHostMountNamesCannotCollideWithGeneratedNames() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      struct AppRoutes {
+        @Route("/")
+        static func home() -> HomePage {
+          HomePage()
+        }
+
+        @Mount("/home")
+        typealias Home = HomeRoutes<RouteView>
+
+        @Mount("/tree")
+        typealias Tree = TreeRoutes<RouteView>
+      }
+      """
+    )
+
+    XCTAssertEqual(
+      expansion.diagnostics,
+      [
+        "Route name `home` is declared more than once; `@Route` and `@Layout` functions need unique names.",
+        "Route name `tree` is reserved by generated `@Routes` code.",
+      ]
+    )
+  }
+
+  func testMountMarkerRequiresTypeAlias() {
+    assertMacroExpansion(
+      """
+      struct AppRoutes {
+        @Mount("/shop")
+        static func shop() -> ShopPage {
+          ShopPage()
+        }
+      }
+      """,
+      expandedSource:
+        """
+        struct AppRoutes {
+          static func shop() -> ShopPage {
+            ShopPage()
+          }
+        }
+        """,
+      diagnostics: [
+        DiagnosticSpec(
+          message:
+            "`@Mount` can only be attached to a type alias, such as `typealias Shop = ShopRoutes<RouteView>`.",
+          line: 2,
+          column: 3
+        )
+      ],
+      macros: testMacros,
+      indentationWidth: .spaces(2)
+    )
   }
 }
 

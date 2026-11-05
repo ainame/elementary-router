@@ -46,6 +46,19 @@ public enum RouteErrorMacro: PeerMacro {
   }
 }
 
+public enum MountMacro: PeerMacro {
+  public static func expansion(
+    of node: AttributeSyntax,
+    providingPeersOf declaration: some DeclSyntaxProtocol,
+    in context: some MacroExpansionContext
+  ) throws -> [DeclSyntax] {
+    if !declaration.is(TypeAliasDeclSyntax.self) {
+      context.diagnose(.init(node: Syntax(declaration), message: MountMarkerDiagnostic()))
+    }
+    return []
+  }
+}
+
 private func diagnoseIfNeeded(
   attribute: AttributeSyntax,
   declaration: some DeclSyntaxProtocol,
@@ -75,6 +88,20 @@ private struct RouteMarkerDiagnostic: DiagnosticMessage {
 
   var diagnosticID: MessageID {
     MessageID(domain: "ElementaryRouterMacros", id: "routeMarkerRequiresStaticFunction")
+  }
+
+  var severity: DiagnosticSeverity {
+    .error
+  }
+}
+
+private struct MountMarkerDiagnostic: DiagnosticMessage {
+  var message: String {
+    "`@Mount` can only be attached to a type alias, such as `typealias Shop = ShopRoutes<RouteView>`."
+  }
+
+  var diagnosticID: MessageID {
+    MessageID(domain: "ElementaryRouterMacros", id: "mountRequiresTypeAlias")
   }
 
   var severity: DiagnosticSeverity {

@@ -30,6 +30,21 @@
 /// router and pass both to `Provider` or `RouterView`.
 ///
 /// `mode` selects whether generated links and routers use browser path routing or hash routing.
+///
+/// ## Features and mounts
+///
+/// A `@Routes` struct with exactly one generic parameter, such as
+/// `struct ShopRoutes<Root: View>`, declares a mountable feature instead of a route set. Its
+/// routes and layouts are registered into a host's route tree, whose `RouteView` is `Root`:
+///
+/// - `RouteView`, its outlet enums, and `Handles` are generated as for a route set
+/// - `RouteSet` holds the feature's handles in the host tree, with one destination factory per
+///   `@Route` returning `RouteDestination<Root>`
+/// - `@Environment(ShopRoutes<Root>.RouteSet.self)` reads the route set inside the host's `Provider`
+/// - `_register(into:under:wrap:)` registers the feature under a host mount record
+///
+/// A feature has no router, `Provider`, `RouterView`, `Link`, `routes()`, `@NotFound`,
+/// `@RouteError`, or `mode`; the host owns them. A host mounts a feature with `@Mount`.
 @attached(
   member,
   names: named(RouteView),
@@ -40,7 +55,8 @@
   named(Provider),
   named(RouterView),
   named(Link),
-  named(routes)
+  named(routes),
+  named(_register)
 )
 public macro Routes(mode: RoutesMode = .path) =
   #externalMacro(module: "ElementaryRouterMacros", type: "RoutesMacro")
@@ -86,3 +102,29 @@ public macro NotFound() = #externalMacro(module: "ElementaryRouterMacros", type:
 @attached(peer, names: arbitrary)
 public macro RouteError() =
   #externalMacro(module: "ElementaryRouterMacros", type: "RouteErrorMacro")
+
+/// Mounts a feature's routes at a static path of a host `@Routes` type.
+///
+/// Attach it to a type alias that names the feature specialized with the host's `RouteView`:
+///
+/// ```swift
+/// @Routes
+/// struct AppRoutes {
+///   @Mount("/shop")
+///   typealias Shop = ShopRoutes<RouteView>
+/// }
+/// ```
+///
+/// The host registers a mount record at the path, under the innermost host `@Layout` that wraps
+/// it, and the feature's routes below that record. The mount's handle is
+/// `routes.handles.shop`, and the feature's route set, with typed destination factories, is
+/// `routes.shop`. The mounted feature owns its path: host routes, nested host layouts, and other
+/// mounts inside it are rejected at compile time.
+///
+/// The path must be static, and the layouts that wrap it must not declare required queries.
+/// A host mounts each feature type once: the generated `routes()` compares the specialized
+/// feature route set types before it registers anything and throws
+/// `RouteTreeError.duplicateFeature` when two aliases name one type. Features of other modules
+/// that share a name are different types and can be mounted together.
+@attached(peer, names: arbitrary)
+public macro Mount(_ path: String) = #externalMacro(module: "ElementaryRouterMacros", type: "MountMacro")

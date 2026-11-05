@@ -244,6 +244,178 @@ It applies the same validation, including `unroutableLocation` for layout
 handles. `router.navigate(to: RouteLocation(url: "/raw?path"))` is the
 unvalidated escape hatch for raw URLs.
 
+## Feature Composition
+
+A feature module can declare routes that a host app mounts into its own route tree. The host
+keeps one tree, one `Router` or `HashRouter`, its layouts, and its `@NotFound` and `@RouteError`
+policy; the feature contributes typed routes, layouts, and views.
+
+A feature is a `@Routes` struct with one generic parameter, the host's route view:
+
+```swift
+// Module Shop
+@Routes
+public struct ShopRoutes<Root: View> {
+  @Layout("/")
+  public static func shopLayout<Content: View>(outlet: Outlet<Content>) -> ShopLayout<Root, Content> {
+    ShopLayout(outlet: outlet)
+  }
+
+  @Route("/")
+  public static func catalog(sort: Query<String> = Query("name")) -> CatalogPage<Root> {
+    CatalogPage(sort: sort.value)
+  }
+
+  @Route("/products/:id")
+  public static func product(id: Int) -> ProductPage<Root> {
+    ProductPage(id: id)
+  }
+}
+```
+
+The host mounts it at a static path with a type alias that specializes the feature with the
+host's `RouteView`:
+
+```swift
+// Module WebApp
+import Blog
+import Shop
+
+@Routes
+struct AppRoutes {
+  @Layout("/")
+  static func shell<Content: View>(outlet: Outlet<Content>) -> AppShell<Content> {
+    AppShell(outlet: outlet)
+  }
+
+  @Mount("/shop")
+  typealias Shop = ShopRoutes<RouteView>
+
+  @Mount("/blog")
+  typealias Blog = BlogRoutes<RouteView>
+
+  @NotFound
+  static func notFound(context: RouteNotFoundContext) -> NotFoundPage {
+    NotFoundPage(path: context.location.path)
+  }
+}
+```
+
+Macros cannot read declarations of another module, so neither side infers the other: the host
+names the feature type, and the feature's macro generates `_register(into:under:wrap:)`, which
+registers the feature's records into the host's `RouteBuilder<AppRoutes.RouteView>`. The host's
+generated `routes()`:
+
+- registers a mount record at `/shop`, under the innermost host layout that wraps the path
+- registers the feature below it, with a wrapper that places `ShopRoutes<AppRoutes.RouteView>.RouteView`
+  into the host view as one concrete outlet case, such as `case shop(ShopRoutes<AppRoutes.RouteView>.RouteView)`
+  in `AppRoutes.RouteView.ShellOutlet`
+- builds one tree and returns a route set with `routes.handles.shop`, the mount record, and
+  `routes.shop`, the feature's route set in that tree
+
+The feature's route set has a destination factory per route, returning host destinations:
+
+```swift
+let routes = try AppRoutes.routes()
+let router = routes.router()
+
+let product = try routes.shop.product(id: 7)   // RouteDestination<AppRoutes.RouteView>
+try routes.href(to: product)                    // "/shop/products/7"
+try router.navigate(to: product)
+router.matchedRoutes                            // [shell, shop, shopLayout, product]
+router.isActive(routes.handles.shop, options: .descendant)
+```
+
+Mounted destinations are host destinations, so `AppRoutes.Link`, `router.href(to:)`, and
+`routes.href(to:)` accept them, and a `@Routes(mode: .hash)` host produces `#/shop/products/7`
+for the same destination.
+
+### Links inside features
+
+Feature views are generic over `Root`, the host's route view, and never name the host. The host's
+generated `Provider`, which `AppRoutes.RouterView` installs, provides two values for them:
+
+- each mounted feature's route set, read with `@Environment(ShopRoutes<Root>.RouteSet.self)`
+- the host router as a `RouteNavigator<Root>`, read with `@Environment(RouteNavigator<Root>.self)`
+
+`RouteNavigator` stores the host's concrete `Router` or `HashRouter`; it is not a router protocol.
+`RouteLink` reads it to link to any destination of the host tree in the host's mode:
+
+```swift
+@View
+public struct ProductPage<Root: View> {
+  @Environment(ShopRoutes<Root>.RouteSet.self) var shop: ShopRoutes<Root>.RouteSet?
+  @Environment(BlogRoutes<Root>.RouteSet.self) var blog: BlogRoutes<Root>.RouteSet?
+
+  let id: Int
+
+  public var body: some View {
+    if let shop {
+      RouteLink(to: shop.catalog()) { "All products" }
+    }
+    // Cross-feature: the shop module imports the blog module.
+    if let blog, let review = try? blog.post(slug: "review-\(id)") {
+      RouteLink(to: review) { "Read the review" }
+    }
+  }
+}
+```
+
+A route set is `nil` when the closest host does not mount that feature. The navigator's
+`isActive`, `href(to:)`, `navigate(to:)`, and `replace(to:)` behave like the router's.
+
+Both values are environment objects identified by their type, the way ElementaryUI identifies
+reactive objects. `ShopRoutes<AppRoutes.RouteView>.RouteSet`, `ShopRoutes<OtherRoutes.RouteView>.RouteSet`,
+and a feature that another module also names `ShopRoutes` are three keys, and
+`RouteNavigator<AppRoutes.RouteView>` is a different key from every other host's navigator.
+A host and its features may share a name: a module that declares a type named `Routes` and
+uses the macro writes `@ElementaryRouter.Routes`, as Swift otherwise cannot tell the attribute
+from the type.
+
+### Supported shape
+
+- A feature declares `@Route` and `@Layout` like a route set. It has no `mode`, `@NotFound`,
+  `@RouteError`, `@Mount`, router, `Provider`, `RouterView`, `Link`, or `routes()`; the host owns
+  them. The names `mount` and `wrap` are reserved in features.
+- A mount path is static: no `:` parameters and no `*` wildcard. Feature routes may use both.
+- The mounted feature owns every URL at and below its path. `@Routes` rejects host routes at or
+  below a mount path, host layouts below it, and mounts that overlap another mount, so a host
+  and a feature it cannot see can never declare routes that match the same URLs. A host layout at
+  exactly the mount path wraps the mount.
+- Host layouts that wrap a mount may read `RouteContext` and defaulted queries; a required query
+  is rejected, because feature destinations cannot supply it. Feature factories take only the
+  feature's own queries, so wrapping host layouts render their query defaults for them.
+- The type alias must specialize the feature with the host's `RouteView`, and a host mounts each
+  feature type once. Spellings cannot show whether two aliases name one type, so the generated
+  `routes()` compares the specialized route set types before registering anything and throws
+  `RouteTreeError.duplicateFeature` for `ShopRoutes<RouteView>` mounted again as
+  `Shop.ShopRoutes<RouteView>` or through another alias. Features of different modules that share
+  a name are different types and mount side by side.
+- `RouteContext` values in a feature describe the host tree: `path` includes the mount path, and
+  `matchedRoutes` starts with the host's layouts and the mount record.
+
+`RouteBuilder._build()` still checks the final tree, so a manually composed tree that registers
+an overlapping route throws `RouteTreeError.duplicateRoute` or `.ambiguousRoute`, and a feature
+registered under a mount record of another builder throws `.foreignParent`. Destinations from
+another `routes()` call are rejected with `RouteMatchError.foreignRoute`, and a destination of
+another host, or of a feature specialized for another host, does not compile.
+
+### Limitations
+
+- Mounting is static. There is no runtime plugin registration and no mount with path parameters.
+- Features do not nest: a feature cannot mount another feature.
+- A host's own `_routerEnvironmentKey` and `_routeSetEnvironmentKey` are still named after the
+  host type, as before feature composition. Two hosts with the same type name, from different
+  modules or scopes, must not be nested in one page. Feature route sets and navigators are keyed
+  by type and have no such restriction.
+- The duplicate-feature check runs when `routes()` builds the tree, not at compile time.
+- Features cannot declare their own fallback views; `/shop/missing` renders the host's
+  `@NotFound`, and an undecodable feature value renders the host's `@RouteError`.
+- Feature views that link must be generic over `Root`. Views without links can stay concrete.
+
+[Examples/FeatureComposition](Examples/FeatureComposition) mounts separate `Shop` and `Blog`
+modules into one app.
+
 ## Macros
 
 ### `@Routes`
@@ -517,13 +689,15 @@ router navigation only for eligible clicks:
 - no non-self target
 
 Modifier clicks, middle clicks, and `_blank` targets stay native browser
-behavior. Without a provided router, or with a destination from another
+behavior. `RouteLink`, used by mounted features, follows the same rules with the
+host's `RouteNavigator`. Without a provided router, or with a destination from another
 `routes()` call, the link stays a plain anchor and the browser performs a normal
 document navigation to the same href.
 
 `AppRoutes.Provider(routes, router:)` installs a route set and the concrete
 `Router<AppRoutes.RouteView>` or `HashRouter<AppRoutes.RouteView>` created by
-that route set in ElementaryUI's environment. `AppRoutes.RouterView` installs
+that route set in ElementaryUI's environment, together with a `RouteNavigator` for
+that router and the route set of each mounted feature. `AppRoutes.RouterView` installs
 its route set and router through the provider, and `AppRoutes.Link(to:)` reads
 the typed router back without existential erasure. Views that build
 destinations read the route set from `AppRoutes._routeSetEnvironmentKey`, which
@@ -580,6 +754,8 @@ In scope for 0.0.1:
 - typed destinations for links, hrefs, navigation, and active matching
 - not-found and route-error fallback rendering
 - typed route-set `Provider`, `RouterView`, and `Link` generation
+- static feature mounts with `@Mount`, with typed feature destinations, `RouteNavigator`, and
+  `RouteLink`
 
 Out of scope for 0.0.1:
 
@@ -595,3 +771,4 @@ Available examples:
 
 - [Examples/RouterExample](Examples/RouterExample): a compact routing feature tour
 - [Examples/TodoApp](Examples/TodoApp): a practical task manager with shared app state, filters, detail routes, and stats
+- [Examples/FeatureComposition](Examples/FeatureComposition): shop and blog feature modules mounted into one host app

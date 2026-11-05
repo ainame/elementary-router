@@ -9,6 +9,8 @@ let routerDependencies: [Target.Dependency] = [
   .product(name: "ElementaryUI", package: "elementary-ui"),
   .product(name: "ElementaryRouter", package: "elementary-router"),
 ]
+let composedDependencies: [Target.Dependency] =
+  ["ComposedHost", "StoreFeature", "NewsFeature"] + routerDependencies
 
 let package = Package(
   name: "elementary-router-compile-checks",
@@ -19,7 +21,11 @@ let package = Package(
   ],
   targets: [
     .target(name: "RouteFixtures", dependencies: routerDependencies),
-    .target(name: "ValidUsage", dependencies: ["RouteFixtures"] + routerDependencies),
+    // Mounted features and their host, each in its own module, as downstream apps compose them.
+    .target(name: "NewsFeature", dependencies: routerDependencies),
+    .target(name: "StoreFeature", dependencies: ["NewsFeature"] + routerDependencies),
+    .target(name: "ComposedHost", dependencies: ["StoreFeature", "NewsFeature"] + routerDependencies),
+    .target(name: "ValidUsage", dependencies: ["RouteFixtures"] + composedDependencies),
     .target(name: "RejectsForeignRouteGroupLink", dependencies: ["RouteFixtures"] + routerDependencies),
     .target(
       name: "RejectsForeignRouteGroupNavigation",
@@ -30,6 +36,15 @@ let package = Package(
     .target(name: "RejectsMissingArgument", dependencies: ["RouteFixtures"] + routerDependencies),
     .target(name: "RejectsMissingLayoutQuery", dependencies: ["RouteFixtures"] + routerDependencies),
     .target(name: "RejectsLayoutQueryWildcardCollision", dependencies: routerDependencies),
+    .target(
+      name: "RejectsMountedDestinationWithStandaloneRouter",
+      dependencies: ["RouteFixtures"] + composedDependencies
+    ),
+    .target(name: "RejectsMountedDestinationOfAnotherHost", dependencies: composedDependencies),
+    .target(name: "RejectsHostDestinationInFeatureView", dependencies: composedDependencies),
+    .target(name: "RejectsFeatureRouteSetOfAnotherHost", dependencies: composedDependencies),
+    .target(name: "RejectsMountWithForeignRoot", dependencies: composedDependencies),
+    .target(name: "RejectsRouteInsideMount", dependencies: composedDependencies),
   ],
   swiftLanguageModes: [.v6]
 )

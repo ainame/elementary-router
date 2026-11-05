@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ElementaryRouter feature composition</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+      nav span {
+        margin-right: 1rem;
+      }
+      nav span[data-active="true"] a {
+        font-weight: bold;
+      }
+      #shop-layout {
+        border: 1px solid #ccc;
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // Temporary Link interception workaround; see the root README.
+      document.addEventListener(
+        "click",
+        (event) => {
+          const target =
+            event.target instanceof Element ? event.target : event.target?.parentElement;
+          const anchor = target?.closest("a[data-router-link]");
+          if (!anchor || event.defaultPrevented) return;
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          ) {
+            return;
+          }
+          if (anchor.target && anchor.target !== "_self") return;
+          if (anchor.hasAttribute("download")) return;
+          if (new URL(anchor.href, location.href).origin !== location.origin) return;
+
+          event.preventDefault();
+        },
+        true,
+      );
+    </script>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>
