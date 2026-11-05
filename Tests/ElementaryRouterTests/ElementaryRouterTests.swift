@@ -190,13 +190,21 @@ struct HashMacroRoutes {
     Issue.record("Expected matched resolution")
   }
 
+  // Each layout stores its own values and the outlet view of its children.
   let rendered = try router.renderCurrentRoute()
-  if case .member(let lang, let teamID, let memberID) = rendered.storage {
+  if case .shell(outlet: let shell) = rendered.storage,
+    case .language(lang: let languageLang, outlet: let language) = shell.storage,
+    case .team(lang: let teamLang, teamID: let teamTeamID, outlet: let team) = language.storage,
+    case .member(let lang, let teamID, let memberID) = team.storage
+  {
+    #expect(languageLang == "en")
+    #expect(teamLang == "en")
+    #expect(teamTeamID == 7)
     #expect(lang == "en")
     #expect(teamID == 7)
     #expect(memberID == 42)
   } else {
-    Issue.record("Expected the leaf route to render, got \(rendered.storage)")
+    Issue.record("Expected the leaf route to render inside its layouts, got \(rendered.storage)")
   }
 }
 
@@ -209,7 +217,11 @@ struct HashMacroRoutes {
   #expect(try routes.teamIndex(lang: "en", teamID: 7).location.href == "/en/teams/7")
 
   let rendered = try router.renderCurrentRoute()
-  if case .teamIndex(let lang, let teamID) = rendered.storage {
+  if case .shell(outlet: let shell) = rendered.storage,
+    case .language(lang: _, outlet: let language) = shell.storage,
+    case .team(lang: _, teamID: _, outlet: let team) = language.storage,
+    case .teamIndex(let lang, let teamID) = team.storage
+  {
     #expect(lang == "en")
     #expect(teamID == 7)
   } else {

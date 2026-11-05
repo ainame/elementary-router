@@ -45,7 +45,9 @@ struct RouteMatch: Equatable, Sendable {
 /// Runtime context passed to matched route and layout renderers.
 ///
 /// A `RouteContext` contains the matched route handle, decoded path and query values, the current
-/// browser location, and the parent-to-leaf route stack for the current match.
+/// browser location, and the parent-to-leaf route stack for the current match. Every record of a
+/// match has its own context: a layout's `route`, `path`, and `params` describe the layout, not
+/// the leaf route below it.
 public struct RouteContext: Sendable {
   /// The route currently being rendered.
   public let route: RouteHandle

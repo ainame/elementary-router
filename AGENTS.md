@@ -39,7 +39,8 @@
 - Do not commit vendored ElementaryUI experiments, temporary TODO files, generated build output, `node_modules`, or Vite `dist`.
 - `Examples/RouterExample` should build against the local package path and upstream `elementary-ui`.
 - `Examples/TodoApp` should build against the local package path and upstream `elementary-ui`.
-- If the Link interception workaround changes, update `README.md` and each example `index.html`.
+- `Tests/BrowserAcceptance/LayoutState` should build against the local package path and upstream `elementary-ui`.
+- If the Link interception workaround changes, update `README.md`, each example `index.html`, and `Tests/BrowserAcceptance/LayoutState/index.html`.
 
 ## Style
 
@@ -60,8 +61,12 @@ cd Examples/RouterExample && swift build
 cd Examples/RouterExample && npm run build
 cd Examples/TodoApp && swift build
 cd Examples/TodoApp && npm run build
+cd Tests/BrowserAcceptance/LayoutState && swift build
+cd Tests/BrowserAcceptance/LayoutState && npm run build
 Scripts/check-compile-failures.sh
 ```
+
+- `Tests/BrowserAcceptance/LayoutState` is a browser fixture for layout mount lifetime and `RouterView` ownership. Run it in a real browser as its README describes when changing generated `RouteView`, `RouterView`, or layout rendering; unit tests cannot observe DOM identity.
 
 - `Scripts/check-compile-failures.sh` builds `Tests/CompileChecks`, a downstream package whose `ValidUsage` target must compile and whose `Rejects*` targets must fail with the error named by each file's `// expected-error:` line. Add a `Rejects*` target when a misuse of the typed API should stay a compile error.
 

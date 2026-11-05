@@ -28,6 +28,8 @@ let package = Package(
     .target(name: "RejectsWrongArgumentType", dependencies: ["RouteFixtures"] + routerDependencies),
     .target(name: "RejectsWrongQueryType", dependencies: ["RouteFixtures"] + routerDependencies),
     .target(name: "RejectsMissingArgument", dependencies: ["RouteFixtures"] + routerDependencies),
+    .target(name: "RejectsMissingLayoutQuery", dependencies: ["RouteFixtures"] + routerDependencies),
+    .target(name: "RejectsLayoutQueryWildcardCollision", dependencies: routerDependencies),
   ],
   swiftLanguageModes: [.v6]
 )

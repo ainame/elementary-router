@@ -53,11 +53,7 @@ public final class RouteBuilder<RouteContent: View> {
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping () -> RouteContent
   ) -> RouteHandle {
-    let typed: (RouteContext) throws(RouteValueError) -> RouteContent = {
-      _ throws(RouteValueError) in
-      render()
-    }
-    return add(path: path, parent: parent, isLeaf: true, render: typed)
+    add(path: path, parent: parent, isLeaf: true, render: .content { _ in render() })
   }
 
   /// Registers a route that renders from a full `RouteContext`.
@@ -76,7 +72,23 @@ public final class RouteBuilder<RouteContent: View> {
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    return add(path: path, parent: parent, isLeaf: true, render: render)
+    add(path: path, parent: parent, isLeaf: true, render: ownContextRenderer(render))
+  }
+
+  /// Registers a route that renders from every context of its match stack.
+  ///
+  /// `render` receives one context per matched record, from the outermost ancestor to this
+  /// route, so `contexts.last` is the route's own context and `contexts[0]` is the context of
+  /// its outermost layout. Generated `@Routes` code uses this to give each enclosing layout its
+  /// own decoded values. Ancestors registered with `_generatedLayout(_:parent:decode:)` have
+  /// already decoded their values successfully when `render` runs.
+  @discardableResult
+  public func _generatedRoute(
+    _ path: String,
+    parent: RouteHandle?,
+    render: @escaping ([RouteContext]) throws(RouteValueError) -> RouteContent
+  ) -> RouteHandle {
+    add(path: path, parent: parent, isLeaf: true, render: .content(render))
   }
 
   /// Registers a layout that does not need a `RouteContext`.
@@ -90,11 +102,7 @@ public final class RouteBuilder<RouteContent: View> {
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping () -> RouteContent
   ) -> RouteHandle {
-    let typed: (RouteContext) throws(RouteValueError) -> RouteContent = {
-      _ throws(RouteValueError) in
-      render()
-    }
-    return add(path: path, parent: parent, isLeaf: false, render: typed)
+    add(path: path, parent: parent, isLeaf: false, render: .content { _ in render() })
   }
 
   /// Registers a layout that renders from a full `RouteContext`.
@@ -107,7 +115,21 @@ public final class RouteBuilder<RouteContent: View> {
     parent: RouteHandle?,
     @HTMLBuilder render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
   ) -> RouteHandle {
-    add(path: path, parent: parent, isLeaf: false, render: render)
+    add(path: path, parent: parent, isLeaf: false, render: ownContextRenderer(render))
+  }
+
+  /// Registers a layout that only decodes its own values.
+  ///
+  /// The layout's content is built by its descendant routes, which are registered with
+  /// `_generatedRoute(_:parent:render:)`. `decode` runs with the layout's own context before any
+  /// descendant renders; a `RouteValueError` it throws is reported with that context.
+  @discardableResult
+  public func _generatedLayout(
+    _ path: String,
+    parent: RouteHandle?,
+    decode: @escaping (RouteContext) throws(RouteValueError) -> Void
+  ) -> RouteHandle {
+    add(path: path, parent: parent, isLeaf: false, render: .decode(decode))
   }
 
   /// Registers the renderer used when no route matches the current location.
@@ -187,12 +209,20 @@ public final class RouteBuilder<RouteContent: View> {
     )
   }
 
+  private func ownContextRenderer(
+    _ render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
+  ) -> RouteTree<RouteContent>.Renderer {
+    .content { contexts throws(RouteValueError) in
+      try render(contexts[contexts.count - 1])
+    }
+  }
+
   @discardableResult
   func add(
     path: String,
     parent: RouteHandle?,
     isLeaf: Bool,
-    render: @escaping (RouteContext) throws(RouteValueError) -> RouteContent
+    render: RouteTree<RouteContent>.Renderer
   ) -> RouteHandle {
     let handle = RouteHandle(id: .init(registration: registration, index: nextIndex))
     nextIndex += 1
@@ -207,7 +237,7 @@ public final class RouteBuilder<RouteContent: View> {
     let parent: RouteHandle?
     let path: String
     let isLeaf: Bool
-    let render: (RouteContext) throws(RouteValueError) -> RouteContent
+    let render: RouteTree<RouteContent>.Renderer
   }
 
   private func isAncestor(
@@ -255,6 +285,10 @@ public final class RouteBuilder<RouteContent: View> {
     let trimmedParent =
       parentPath.count > 1 && parentPath.last == "/" ? String(parentPath.dropLast()) : parentPath
     let trimmedChild = childPath.first == "/" ? String(childPath.dropFirst()) : childPath
-    return trimmedChild.isEmpty ? trimmedParent : trimmedParent + "/" + trimmedChild
+    if trimmedChild.isEmpty {
+      return trimmedParent
+    }
+    // A root parent already ends with the separator, so `:lang` under `/` is `/:lang`.
+    return trimmedParent == "/" ? "/" + trimmedChild : trimmedParent + "/" + trimmedChild
   }
 }

@@ -8,7 +8,8 @@ public enum RouteMatchError: Error, Equatable, Sendable {
   /// The supplied route handle belongs to this tree's builder but was registered after the tree
   /// was built.
   case unknownRoute
-  /// A required path parameter was missing, or empty, while building the target URL.
+  /// A required path parameter was missing, or empty, while building the target URL, or a query
+  /// value required by an enclosing layout was missing.
   case missingRequiredParameter(name: String)
   /// A path value would produce a segment that the browser changes or removes.
   ///
@@ -19,7 +20,7 @@ public enum RouteMatchError: Error, Equatable, Sendable {
   /// both modes.
   case invalidPathSegment(name: String, value: String)
   /// A typed value encoded to a string that its `RouteValue` type cannot decode again, so the
-  /// route could never read it back.
+  /// route could never read it back, or a value of the URL that an enclosing layout cannot decode.
   case invalidValue(name: String, rawValue: String, expected: String)
   /// The built URL does not resolve to the requested route.
   ///
@@ -40,7 +41,31 @@ public struct RouteTree<RouteContent: View> {
     let pattern: RoutePattern
     /// `false` for layouts, which join a match stack but never match a location on their own.
     let isLeaf: Bool
-    let render: (RouteContext) throws(RouteValueError) -> RouteContent
+    let render: Renderer
+  }
+
+  /// How a record takes part in rendering a matched stack.
+  enum Renderer {
+    /// Renders content from the parent-to-self contexts of the match stack.
+    ///
+    /// The last context is the record's own. Only the leaf record's content is rendered; the
+    /// content of an ancestor record is evaluated for its errors and then discarded.
+    case content(([RouteContext]) throws(RouteValueError) -> RouteContent)
+    /// Decodes the record's own values without producing content.
+    ///
+    /// Generated layouts use this so a failed layout value is reported with the layout's own
+    /// context before the leaf builds the whole view tree.
+    case decode((RouteContext) throws(RouteValueError) -> Void)
+
+    func evaluate(_ contexts: [RouteContext]) throws(RouteValueError) -> RouteContent? {
+      switch self {
+      case .content(let render):
+        return try render(contexts)
+      case .decode(let decode):
+        try decode(contexts[contexts.count - 1])
+        return nil
+      }
+    }
   }
 
   enum Resolution: Sendable {
@@ -108,6 +133,7 @@ public struct RouteTree<RouteContent: View> {
     else {
       throw RouteMatchError.unroutableLocation(href: location.href)
     }
+    try validateLayoutValues(of: record, at: location)
 
     return RouteDestination(
       route: route,
@@ -182,19 +208,12 @@ public struct RouteTree<RouteContent: View> {
     }
 
     let contexts = routeContexts(for: matches, location: location)
-    let recordsByID = recordsByRouteID()
-
-    for context in contexts {
-      guard let record = recordsByID[context.route.id] else { continue }
-
-      do throws(RouteValueError) {
-        _ = try record.render(context)
-      } catch {
-        return .error(RouteErrorContext(error: error, routeContext: context))
-      }
+    switch evaluate(contexts) {
+    case .success:
+      return .matched(contexts[contexts.count - 1])
+    case .failure(let error):
+      return .error(error.context)
     }
-
-    return .matched(contexts[contexts.count - 1])
   }
 
   func _render(_ location: RouteLocation) throws(RouterRenderError) -> RouteContent {
@@ -222,27 +241,81 @@ public struct RouteTree<RouteContent: View> {
     }
 
     let contexts = routeContexts(for: matches, location: location)
+    switch evaluate(contexts) {
+    case .success(let rendered):
+      guard let rendered else {
+        throw RouterRenderError.routeNotFound
+      }
+      return rendered
+    case .failure(let failure):
+      guard let errorRenderer else {
+        throw RouterRenderError.routeRenderFailed(failure.context.error)
+      }
+      return errorRenderer(failure.context)
+    }
+  }
+
+  /// A route value error reported with the context of the record that threw it.
+  struct EvaluationFailure: Error {
+    let context: RouteErrorContext
+  }
+
+  /// Evaluates every record of a match stack from parent to leaf and returns the leaf content.
+  ///
+  /// Each record sees the contexts from the root to itself, so a failure is reported with the
+  /// context of the outermost record that threw, and no descendant is evaluated after it.
+  private func evaluate(
+    _ contexts: [RouteContext]
+  ) -> Result<RouteContent?, EvaluationFailure> {
     let recordsByID = recordsByRouteID()
     var rendered: RouteContent?
 
-    for context in contexts {
+    for index in contexts.indices {
+      let context = contexts[index]
       guard let record = recordsByID[context.route.id] else { continue }
 
       do throws(RouteValueError) {
-        rendered = try record.render(context)
+        let content = try record.render.evaluate(Array(contexts[...index]))
+        rendered = index == contexts.count - 1 ? content : nil
       } catch {
-        let errorContext = RouteErrorContext(error: error, routeContext: context)
-        guard let errorRenderer else {
-          throw RouterRenderError.routeRenderFailed(error)
-        }
-        return errorRenderer(errorContext)
+        return .failure(
+          EvaluationFailure(context: RouteErrorContext(error: error, routeContext: context))
+        )
       }
     }
 
-    guard let rendered else {
-      throw RouterRenderError.routeNotFound
+    return .success(rendered)
+  }
+
+  /// Checks that every generated layout above `leaf` can decode its own values at `location`.
+  ///
+  /// A destination is only valid when the whole match stack renders, so a layout's required
+  /// query that is missing, or a layout value its type cannot decode, rejects the destination
+  /// instead of producing a URL that renders `@RouteError`. Layouts registered with a content
+  /// renderer are not evaluated here, because their renderers may have effects.
+  private func validateLayoutValues(
+    of leaf: Record,
+    at location: RouteLocation
+  ) throws(RouteMatchError) {
+    let matches = matchStack(for: leaf, location: location)
+    let recordsByID = recordsByRouteID()
+    for context in routeContexts(for: matches, location: location).dropLast() {
+      guard let record = recordsByID[context.route.id],
+        case .decode(let decode) = record.render
+      else {
+        continue
+      }
+      do throws(RouteValueError) {
+        try decode(context)
+      } catch {
+        switch error {
+        case .missing(let name):
+          throw RouteMatchError.missingRequiredParameter(name: name)
+        case .invalid(let name, let rawValue, let expected):
+          throw RouteMatchError.invalidValue(name: name, rawValue: rawValue, expected: expected)
+        }
+      }
     }
-    return rendered
   }
 
   private func findLeafRecord(for location: RouteLocation) -> Record? {
@@ -271,15 +344,18 @@ public struct RouteTree<RouteContent: View> {
       }
     }
 
+    // Every record of the chain must match, so the stack always has one entry per ancestor.
+    // Generated renderers rely on this to read each layout's context by its depth.
     var matches: [RouteMatch] = []
     for record in chain.reversed() {
       let params =
         record.handle == leaf.handle
         ? record.pattern.match(location.path)
         : record.pattern.prefixMatch(location.path)
-      if let params {
-        matches.append(RouteMatch(route: record.handle, path: record.pattern.path, params: params))
+      guard let params else {
+        return []
       }
+      matches.append(RouteMatch(route: record.handle, path: record.pattern.path, params: params))
     }
     return matches
   }

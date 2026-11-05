@@ -3,19 +3,24 @@
 /// Apply this macro to a type that contains `@Route`, `@Layout`, `@NotFound`, and `@RouteError`
 /// declarations. The macro generates:
 ///
-/// - `RouteView`: the typed view union rendered by this route set
+/// - `RouteView`: the typed view tree rendered by this route set, with a nested outlet enum
+///   per layout, such as `RouteView.ShellOutlet`, that selects the layout's matched child and
+///   is rendered through `Outlet<_RouteOutlet<RouteView.ShellOutlet>>`
 /// - `RouteSet`: the compiled route tree plus route handles, `router()` to create either
 ///   `Router<RouteView>` or `HashRouter<RouteView>` for them, and one typed destination factory
 ///   per `@Route`, such as `profile(lang:profileId:tab:hash:)`, returning
 ///   `RouteDestination<RouteView>`
 /// - `Handles`: low-level route handles for each declared route and layout
 /// - `Provider`: a route-set-specific environment provider for a route set and its router
-/// - `RouterView`: a route-set-specific view that renders the current route
+/// - `RouterView`: a route-set-specific view that renders the current route, either for a route
+///   set and router it creates once per mounted lifetime, or for a supplied pair
 /// - `Link`: a route-set-specific navigation view for a `RouteDestination<RouteView>`
 /// - `routes()`: builds a route set
 ///
 /// Destination factories take the route's path values, wildcard value, and query values with
-/// their declared types, so missing or mistyped arguments do not compile. A factory throws
+/// their declared types, followed by the query values of the layouts above the route, so missing
+/// or mistyped arguments do not compile. A query name shared by a route and its layouts is one
+/// argument, required when any declaration has no default. A factory throws
 /// `RouteMatchError` when the values cannot produce a URL that resolves back to the route; a
 /// route without path or wildcard values and with only built-in query types gets a non-throwing
 /// factory. Layouts get no factory, because they never match a location on their own.
@@ -64,6 +69,11 @@ public macro Route(_ path: String) =
 /// wrapped route matches, but never match a location on their own: declare a `@Route` with the
 /// same path to make the layout's own path navigable. Use `Outlet` inside the layout body to
 /// place the child route content.
+///
+/// The function must have exactly one `Outlet<Content>` parameter, where `Content` is its only
+/// generic parameter. Its other parameters are decoded from the layout's own match: path values,
+/// `Query` values with the layout's defaults, and a `RouteContext` for the layout. A layout stays
+/// mounted, with its view state, while navigation stays among the routes it wraps.
 @attached(peer, names: arbitrary)
 public macro Layout(_ path: String) =
   #externalMacro(module: "ElementaryRouterMacros", type: "LayoutMacro")

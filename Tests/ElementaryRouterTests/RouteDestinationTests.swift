@@ -163,7 +163,9 @@ private func hashRouter(
 
   try router.navigate(to: implicit)
   let rendered = try router.renderCurrentRoute()
-  if case .article(let slug, let sort) = rendered.storage {
+  if case .shell(outlet: let shell) = rendered.storage,
+    case .article(let slug, let sort) = shell.storage
+  {
     #expect(slug == Slug("intro"))
     #expect(sort == .newest)
   } else {
@@ -411,7 +413,7 @@ private func hashRouter(
     }
 
     let rendered = try hash.renderCurrentRoute()
-    if case .user(let name) = rendered.storage {
+    if case .shell(outlet: let shell) = rendered.storage, case .user(let name) = shell.storage {
       #expect(name == value)
     } else {
       Issue.record("Expected the user route for \(value), got \(rendered.storage)")
@@ -419,7 +421,7 @@ private func hashRouter(
 
     try path.navigate(to: search)
     let renderedSearch = try path.renderCurrentRoute()
-    if case .search(let q) = renderedSearch.storage {
+    if case .shell(outlet: let shell) = renderedSearch.storage, case .search(let q) = shell.storage {
       #expect(q == value)
     } else {
       Issue.record("Expected the search route for \(value), got \(renderedSearch.storage)")

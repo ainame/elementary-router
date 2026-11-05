@@ -130,6 +130,17 @@ let app = Application(AppRoutes.RouterView())
 app.mount(in: .body)
 ```
 
+`AppRoutes.RouterView()` owns its route set and router. They are created the
+first time the mounted view renders and kept, together with the router's
+browser history listener, until the view is unmounted; rebuilding the body of a
+view that contains `RouterView()` does not create another route set or router.
+A `RouterView()` mounted again later creates a new pair.
+
+`AppRoutes.RouterView(routes, router:)` renders a pair you own instead. The view
+keeps no copy of its own: when a rebuilt parent body supplies a different pair,
+the view renders that pair from then on, and the previous router lives as long
+as you keep it.
+
 Put visible app chrome in a route layout, so the app entry point only mounts routing:
 
 ```swift
@@ -196,6 +207,28 @@ A defaulted query parameter, such as `tab: Query<String> = Query("overview")`,
 becomes an optional factory argument. Omitting it keeps it out of the URL and
 the route renders its default; passing the default value writes it explicitly.
 
+A route's factory also takes the query values of every layout above it, after
+the route's own, from the outermost layout in. A query name is one URL value,
+so a route and its layouts that declare the same name share one argument: it
+is required when any of them declares it without a default, and otherwise
+optional, and omitting it lets each declaration render its own default. With
+`@Layout("/:lang/admin") admin(lang:level: Query<Int>, outlet:)`, the route
+`@Route("/:lang/admin/users") adminUsers(lang:)` gets
+`routes.adminUsers(lang: "en", level: 3)`.
+
+A route and its layouts must declare a shared path parameter or query name with
+one type; `@Routes` reports a mismatch, such as `id: Int` on a layout and
+`id: String` on its route, a layout query with the name of a route path or
+wildcard parameter, or a layout query named `hash`, and generates no code for
+that route. Types are compared by spelling, because macros do not see resolved
+types: `Int` and `Swift.Int` are the same, but a typealias and the type it
+names, or a type qualified with another module name, are reported as
+different. Spell a shared value's type the same way everywhere. Building a destination, including
+the untyped `navigate(to: handle, params:query:)`, also checks that every
+layout above the route can decode its values: a missing required layout query
+throws `missingRequiredParameter`, and a value a layout cannot decode throws
+`invalidValue`.
+
 `router.isActive(destination)` is `true` when the current leaf route and path
 values equal the destination's and every query value the destination wrote is
 present. Pass `includeQuery: false` to ignore the query and `includeHash: true`
@@ -226,7 +259,8 @@ struct AppRoutes {
 
 The macro generates:
 
-- `AppRoutes.RouteView`: a single typed view union for all route outputs
+- `AppRoutes.RouteView`: a single typed view tree for all route outputs, with
+  a nested outlet enum per layout
 - `AppRoutes.Handles`: named low-level route handles, including layouts
 - `AppRoutes.RouteSet`: the generated handles, a typed destination factory for
   each route, `href(to:)`, and `router()` to create the typed router for the
@@ -320,10 +354,48 @@ static func languageHome(lang: String) -> LanguageHomePage {
 }
 ```
 
-Treat `@Layout` as route composition, not as an application state boundary.
-The router may recreate layout view values while resolving a new location, so
-state that must survive navigation should live above `AppRoutes.RouterView()`
-and be passed through ElementaryUI's environment:
+#### Layout values
+
+Every matched layout receives its own values, decoded from its own match:
+
+- path and wildcard values from the part of the URL the layout's path matches
+- `Query<T>` values with the layout's own defaults, even when the leaf route
+  declares no such query or declares it with another default
+- a `RouteContext` parameter, when declared, with the layout's own `route`,
+  `path`, and `params`; `query`, `location`, and the full `matchedRoutes` stack
+  are shared by every context of one match
+
+Values are decoded from parent to leaf. The first layout or route whose value
+cannot be decoded, such as `/:lang/teams/abc` for `teamID: Int`, renders the
+route set's `@RouteError` with that layout's or route's context; its
+descendants are not rendered. A required `Query<T>` that only a layout declares
+fails the same way when it is missing. Without `@RouteError` or `@NotFound`,
+the generated `RouterView` stops with a precondition failure that names the
+missing declaration, and `RouteTree` reports `RouterRenderError`.
+
+#### Layout state
+
+The generated `RouteView` is a tree of concrete views: each layout is rendered
+once, outside the switch that selects among its direct children. Every layout
+gets a nested outlet enum, such as `AppRoutes.RouteView.LanguageLayoutOutlet`,
+with one case per direct child, and receives it as the concrete
+`Outlet<_RouteOutlet<LanguageLayoutOutlet>>`. ElementaryUI therefore keeps a layout mounted, with its
+`@State`, focus, and DOM elements, as long as navigation stays inside the
+layout's subtree:
+
+- between sibling routes, such as `/en/teams/7` and `/en/teams/7/members/42`
+  under `@Layout("/:lang/teams/:teamID")`
+- when only path or query values change, such as `/en/teams/7` to
+  `/en/teams/8`; the layout receives the new values
+- when a view above `RouterView()` rebuilds its body
+
+Navigating to a route outside the layout's subtree removes the layout, and
+returning creates it again with fresh state. `Tests/BrowserAcceptance/LayoutState`
+checks these guarantees in a browser.
+
+State that must outlive a layout's subtree, such as stores, sessions, or caches
+shared by several branches, should live above `AppRoutes.RouterView()` and be
+passed through ElementaryUI's environment:
 
 ```swift
 @View
@@ -337,10 +409,17 @@ struct AppRoot {
 }
 ```
 
-Layout views can read shared state from the environment, but they should not own
-durable app state such as stores, sessions, or caches. This keeps route
-composition close to TanStack Router's layout idea without making Swift view
-identity part of the router's state model.
+#### Supported layout shapes
+
+A layout must be a non-throwing, non-async `static func` with exactly one
+`Outlet<Content>` parameter, where `Content` is its only generic parameter. Every
+route and layout parameter needs an argument label, labels must be unique, and
+route and layout names must be unique. `@Route` functions cannot be generic or
+take an outlet. The names `collection`, `content`, `notFound`, and `routeError`
+are reserved by generated code. `@Routes` reports violations at compile time and
+generates no code for the offending declaration, so the diagnostic is the only
+error for it; code that uses that declaration's generated factory or handle
+reports it as missing until the declaration is fixed.
 
 ### `@NotFound`
 
@@ -418,7 +497,7 @@ Empty path parameter values throw `RouteMatchError.missingRequiredParameter`
 when a destination or href is built, because the empty segment would collapse
 and the URL would no longer match the route. A URL claimed by a route with
 higher precedence throws `RouteMatchError.unroutableLocation`.
-- `@Layout` composes nested route UI through `Outlet<Content>`; keep durable app state above the router view.
+- `@Layout` composes nested route UI through `Outlet<Content>`; a layout stays mounted while navigation stays in its subtree, and state shared across branches belongs above the router view.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
 - `RouteValues` is used for both path params and query params.
 - `Query<T>` maps query values into typed route function parameters.

@@ -18,8 +18,34 @@ public struct ShopShell<Content: View> {
 @Routes
 public struct ShopRoutes {
   @Layout("/")
-  public static func shell<Content: View>(outlet: Outlet<Content>) -> ShopShell<Content> {
+  public static func shell<Content: View>(
+    context: RouteContext,
+    outlet: Outlet<Content>
+  ) -> ShopShell<Content> {
     ShopShell(outlet: outlet)
+  }
+
+  // A nested layout with a query only it declares; its outlet view is public generated API.
+  @Layout("/products")
+  public static func catalog<Content: View>(
+    view: Query<String> = Query("grid"),
+    outlet: Outlet<Content>
+  ) -> ShopShell<Content> {
+    ShopShell(outlet: outlet)
+  }
+
+  // A layout with a required query: every route below it takes `region` in its factory.
+  @Layout("/orders")
+  public static func orders<Content: View>(
+    region: Query<String>,
+    outlet: Outlet<Content>
+  ) -> ShopShell<Content> {
+    ShopShell(outlet: outlet)
+  }
+
+  @Route("/orders/:id")
+  public static func order(id: Int) -> EmptyHTML {
+    EmptyHTML()
   }
 
   @Route("/")

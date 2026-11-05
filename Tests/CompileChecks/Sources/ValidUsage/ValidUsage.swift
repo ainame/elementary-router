@@ -22,6 +22,19 @@ struct ShopApp {
   }
 }
 
+/// Generated outlet views of public route sets are public, so other modules can name them.
+public func catalogOutletType() -> ShopRoutes.RouteView.CatalogOutlet.Type {
+  ShopRoutes.RouteView.CatalogOutlet.self
+}
+
+/// A view that owns its router: it is created once for the mounted view.
+@View
+struct OwnedShopApp {
+  var body: some View {
+    ShopRoutes.RouterView()
+  }
+}
+
 public func useTypedDestinations(
   shop: ShopRoutes.RouteSet,
   blog: BlogRoutes.RouteSet
@@ -31,6 +44,9 @@ public func useTypedDestinations(
   let product = try shop.product(id: 42, tab: "reviews", hash: "top")
   let defaultTab = try shop.product(id: 42)
   let post = try blog.post(slug: "hello")
+  // `region` is required by the enclosing `orders` layout; `view` is a defaulted layout query.
+  let order = try shop.order(id: 7, region: "eu")
+  let gridProduct = try shop.product(id: 42, view: "list")
 
   try shopRouter.navigate(to: product)
   try shopRouter.replace(to: shop.home())
@@ -39,6 +55,8 @@ public func useTypedDestinations(
 
   return [
     try shop.href(to: product),
+    try shop.href(to: order),
+    try shop.href(to: gridProduct),
     try blog.href(to: post),
     try shopRouter.href(to: product),
     try blogRouter.href(to: post),
