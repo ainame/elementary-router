@@ -14,7 +14,14 @@ The package requires Swift 6.4 and ElementaryUI 0.9. Native macOS builds require
 macOS 26 or later. The examples use the matching Swift 6.4 Embedded WebAssembly
 SDK for their browser builds.
 
-Add the package to `Package.swift`:
+The first release, `0.0.1`, has not been published yet. To use the current source from a
+local checkout, add the package to `Package.swift` with the path to that checkout:
+
+```swift
+.package(path: "../elementary-router")
+```
+
+Once `0.0.1` is released, use the versioned dependency:
 
 ```swift
 .package(url: "https://github.com/ainame/elementary-router", exact: "0.0.1")
@@ -632,9 +639,10 @@ an invalid `Int` path parameter.
 - Route handles belong to the route set that registered them; see the identity rules above.
   `RouteBuilder._build()` throws `RouteTreeError.foreignParent` when a route names a
   parent handle registered by another builder.
-- A router observes browser history from creation until it is released. Every
-  navigation, including `pushState`-based client navigation, which does not emit
-  `popstate`, and browser back and forward, updates the router state exactly once.
+- A router observes browser history from creation until both it and any retained
+  `RouteNavigator` obtained from it are released. Every navigation, including
+  `pushState`-based client navigation, which does not emit `popstate`, and browser
+  back and forward, updates the router state exactly once.
 
 ### Matching Precedence
 
