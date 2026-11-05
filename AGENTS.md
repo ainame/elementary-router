@@ -60,7 +60,10 @@ cd Examples/RouterExample && swift build
 cd Examples/RouterExample && npm run build
 cd Examples/TodoApp && swift build
 cd Examples/TodoApp && npm run build
+Scripts/check-compile-failures.sh
 ```
+
+- `Scripts/check-compile-failures.sh` builds `Tests/CompileChecks`, a downstream package whose `ValidUsage` target must compile and whose `Rejects*` targets must fail with the error named by each file's `// expected-error:` line. Add a `Rejects*` target when a misuse of the typed API should stay a compile error.
 
 - On macOS when using a `swiftly` OSS toolchain, XCTest-based test targets may fail under plain `swift test` because XCTest is resolved from Apple's developer environment. In that case, run `xcrun swift test` instead. Do not add an `XCTest` package dependency or local shim target for this.
 

@@ -15,249 +15,236 @@ private let testMacros: [String: Macro.Type] = [
 ]
 
 final class RoutesMacroTests: XCTestCase {
-  func testRoutesMacroExpansionGeneratesTypedRouteSet() {
-    assertMacroExpansion(
+  func testRoutesMacroGeneratesTypedDestinationFactories() throws {
+    let expansion = try expandRoutes(
       """
       @Routes
       struct AppRoutes {
+        @Layout("/")
+        static func shell<Content: View>(outlet: Outlet<Content>) -> Shell<Content> {
+          Shell(outlet: outlet)
+        }
+
+        @Route("/")
+        static func home(page: Query<Int> = Query(1)) -> HomePage {
+          HomePage(page: page.value)
+        }
+
+        @Route("/search")
+        static func search(q: Query<String>) -> SearchPage {
+          SearchPage(q: q.value)
+        }
+
         @Route("/users/:id")
         static func user(id: Int, tab: Query<String> = Query("overview")) -> UserPage {
           UserPage(id: id, tab: tab.value)
         }
-      }
-      """,
-      expandedSource:
-        """
-        struct AppRoutes {
-          static func user(id: Int, tab: Query<String> = Query("overview")) -> UserPage {
-            UserPage(id: id, tab: tab.value)
-          }
 
-          @View
-            struct RouteView {
-              enum Storage {
-                case user(id: Int, tab: String)
-              }
-
-              let storage: Storage
-
-              init(storage: Storage) {
-                self.storage = storage
-              }
-
-              var body: some View {
-                switch storage {
-                      case .user(let id, let tab):
-                  AppRoutes.user(id: id, tab: Query(tab))
-                }
-              }
-            }
-
-          struct Handles {
-              let user: RouteHandle
-
-              init(user: RouteHandle) {
-                self.user = user
-              }
-            }
-
-          struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
-
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
-
-              func router() -> Router<RouteView> {
-                Router(routes: tree)
-              }
-
-              func userHref(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> String {
-              let params: RouteValues = ["id": RouteValues.ValueLiteral(id)]
-                var query = RouteValues()
-                if let tab {
-                query = query.set("tab", tab)
-              }
-              return try tree._href(to: handles.user, params: params, query: query, hash: hash)
-            }
-            }
-
-          static let _routerEnvironmentKey = EnvironmentValues._Key<Router<RouteView>?>(
-              "ElementaryRouter.AppRoutes.router",
-              defaultValue: nil
-            )
-
-          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
-              "ElementaryRouter.AppRoutes.routes",
-              defaultValue: nil
-            )
-
-          @View
-            struct Provider<Content: View> {
-              let routes: RouteSet
-              let router: Router<RouteView>
-              let content: Content
-
-              init(_ routes: RouteSet, router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
-                precondition(
-                  router._uses(routes.tree),
-                  "AppRoutes.Provider requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-                self.content = content()
-              }
-
-              var body: some View {
-                content.environment(AppRoutes._routerEnvironmentKey, router)
-                  .environment(AppRoutes._routeSetEnvironmentKey, routes)
-              }
-            }
-
-          @View
-            struct RouterView {
-              let routes: RouteSet
-              let router: Router<RouteView>
-
-              init() {
-                do throws(RouteTreeError) {
-                  let routes = try AppRoutes.routes()
-                  self.routes = routes
-                  self.router = routes.router()
-                } catch {
-                  preconditionFailure("AppRoutes.RouterView could not build routes.")
-                }
-              }
-
-              init(_ routes: RouteSet, router: Router<RouteView>) {
-                precondition(
-                  router._uses(routes.tree),
-                  "AppRoutes.RouterView requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-              }
-
-              var body: some View {
-                Provider(routes, router: router) {
-                  rendered
-                }
-              }
-
-              private var rendered: RouteView {
-                do {
-                  return try router.renderCurrentRoute()
-                } catch {
-                  preconditionFailure("AppRoutes.RouterView could not render the current route.")
-                }
-              }
-            }
-
-          @View
-            struct Link<Content: View> {
-              @Environment(AppRoutes._routerEnvironmentKey) var router
-
-              let route: RouteHandle
-              let params: RouteValues
-              let query: RouteValues
-              let hash: String
-              let replace: Bool
-              let target: HTMLAttributeValue.Target?
-              let content: Content
-
-              init(
-                to route: RouteHandle,
-                params: RouteValues = RouteValues(),
-                query: RouteValues = RouteValues(),
-                hash: String = "",
-                replace: Bool = false,
-                target: HTMLAttributeValue.Target? = nil,
-                @HTMLBuilder content: () -> Content
-              ) {
-                self.route = route
-                self.params = params
-                self.query = query
-                self.hash = hash
-                self.replace = replace
-                self.target = target
-                self.content = content()
-              }
-
-              var body: some View {
-                if let target {
-                  a(.href(href), .target(target), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                } else {
-                  a(.href(href), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                }
-              }
-
-              private func handleClick(_ event: MouseEvent) {
-                guard
-                  event.button == 0,
-                  !event.altKey,
-                  !event.ctrlKey,
-                  !event.metaKey,
-                  !event.shiftKey,
-                  target == nil || target?.rawValue == "" || target?.rawValue == "_self"
-                else {
-                  return
-                }
-
-                try? router?.navigate(
-                  to: route,
-                  params: params,
-                  query: query,
-                  hash: hash,
-                  replace: replace
-                )
-              }
-
-              private var href: String {
-                (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
-              }
-            }
-
-          static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteBuilder<RouteView>()
-
-                  let user = collection._route("/users/:id", parent: nil) { context throws(RouteValueError) in
-                RouteView(storage: .user(id: try context.params.require("id", Int.self), tab: context.query.get("tab", String.self) ?? "overview"))
-              }
-
-              return RouteSet(
-                tree: try collection._build(),
-                handles: Handles(user: user)
-              )
-            }
+        @Route("/articles")
+        static func articles(sort: Query<SortOrder> = Query(.newest)) -> ArticlesPage {
+          ArticlesPage(sort: sort.value)
         }
-        """,
-      macros: testMacros,
-      indentationWidth: .spaces(2)
+
+        @Route("/docs/*")
+        static func docs(splat: Wildcard) -> DocsPage {
+          DocsPage(slug: splat.value)
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    let source = expansion.source
+
+    // Path, wildcard, and query values keep their declared types; defaulted queries are optional.
+    XCTAssertTrue(
+      source.contains(
+        #"func user(id: Int, tab: String? = nil, hash: String = "") throws(RouteMatchError) -> RouteDestination<RouteView> {"#
+      ),
+      source
+    )
+    XCTAssertTrue(source.contains("to: self.handles.user,"), source)
+    XCTAssertTrue(source.contains(#"params: RouteValues()._setting("id", id),"#), source)
+    XCTAssertTrue(source.contains(#"query: RouteValues()._settingIfPresent("tab", tab),"#), source)
+    XCTAssertTrue(
+      source.contains(
+        #"func docs(splat: String, hash: String = "") throws(RouteMatchError) -> RouteDestination<RouteView> {"#
+      ),
+      source
+    )
+    XCTAssertTrue(source.contains(#"params: RouteValues()._setting("*", splat),"#), source)
+
+    // Static paths with built-in query types cannot fail, so their factories do not throw.
+    XCTAssertTrue(
+      source.contains(#"func home(page: Int? = nil, hash: String = "") -> RouteDestination<RouteView> {"#),
+      source
+    )
+    XCTAssertTrue(
+      source.contains(#"func search(q: String, hash: String = "") -> RouteDestination<RouteView> {"#),
+      source
+    )
+    XCTAssertTrue(source.contains(#"query: RouteValues()._setting("q", q),"#), source)
+
+    // A custom query type may encode a value it cannot decode, so its factory throws.
+    XCTAssertTrue(
+      source.contains(
+        #"func articles(sort: SortOrder? = nil, hash: String = "") throws(RouteMatchError) -> RouteDestination<RouteView> {"#
+      ),
+      source
+    )
+
+    // Layouts never match on their own, so they get handles but no destination factory.
+    XCTAssertTrue(source.contains("let shell: RouteHandle"), source)
+    XCTAssertFalse(source.contains("func shell("), source)
+
+    // Untyped per-route href helpers are replaced by `href(to:)` with a typed destination.
+    XCTAssertFalse(source.contains("Href("), source)
+    XCTAssertTrue(
+      source.contains("func href(to destination: RouteDestination<RouteView>) throws(RouteMatchError) -> String {"),
+      source
+    )
+    XCTAssertTrue(source.contains("try tree._validate(destination)"), source)
+    XCTAssertTrue(source.contains("return destination.location.href"), source)
+  }
+
+  func testRoutesMacroGeneratesLinkForTypedDestinations() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      public struct AppRoutes {
+        @Route("/users/:id")
+        static func user(id: Int) -> UserPage {
+          UserPage(id: id)
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    let source = expansion.source
+
+    XCTAssertTrue(
+      source.contains(
+        #"public func user(id: Int, hash: String = "") throws(RouteMatchError) -> RouteDestination<RouteView> {"#
+      ),
+      source
+    )
+    XCTAssertTrue(source.contains("let destination: RouteDestination<RouteView>"), source)
+    XCTAssertTrue(source.contains("to destination: RouteDestination<RouteView>,"), source)
+    XCTAssertTrue(source.contains("try router.navigate(to: destination, replace: replace)"), source)
+    XCTAssertTrue(
+      source.contains(#".attributes(.data("router-link", value: "true"), when: usesClientNavigation)"#),
+      source
+    )
+
+    // Links take only typed destinations, never fall back to `#`, and never discard errors.
+    XCTAssertFalse(source.contains("to route: RouteHandle"), source)
+    XCTAssertFalse(source.contains("params: RouteValues = RouteValues()"), source)
+    XCTAssertFalse(source.contains(##"?? "#""##), source)
+    XCTAssertFalse(source.contains("try?"), source)
+  }
+
+  func testRoutesMacroGeneratesFragmentHrefsForHashMode() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes(mode: .hash)
+      struct DocsRoutes {
+        @Route("/docs/*")
+        static func docs(splat: Wildcard) -> DocsPage {
+          DocsPage(slug: splat.value)
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    let source = expansion.source
+    XCTAssertTrue(source.contains("func router() -> HashRouter<RouteView> {"), source)
+    XCTAssertTrue(source.contains(##"return "#" + destination.location.href"##), source)
+    XCTAssertFalse(source.contains("return destination.location.href"), source)
+  }
+
+  func testRoutesMacroRejectsNamesThatCollideWithGeneratedRouteSetMembers() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      struct AppRoutes {
+        @Route("/router")
+        static func router() -> RouterPage {
+          RouterPage()
+        }
+
+        @Route("/tree")
+        static func tree() -> TreePage {
+          TreePage()
+        }
+
+        @Route("/notes/:hash")
+        static func note(hash: String) -> NotePage {
+          NotePage()
+        }
+
+        @Route("/search")
+        static func search(hash: Query<String>) -> SearchPage {
+          SearchPage()
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(
+      expansion.diagnostics,
+      [
+        "Route name `router` is reserved by the generated `RouteSet`.",
+        "Route name `tree` is reserved by the generated `RouteSet`.",
+        "Route parameter `hash` conflicts with the generated destination `hash:` argument.",
+        "Route parameter `hash` conflicts with the generated destination `hash:` argument.",
+      ]
+    )
+  }
+
+  func testRoutesMacroRejectsStaticDotSegments() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      struct AppRoutes {
+        @Route("/files/../raw")
+        static func raw() -> RawPage {
+          RawPage()
+        }
+
+        @Route("/files/%2E")
+        static func encodedDot() -> RawPage {
+          RawPage()
+        }
+
+        @Layout("/./admin")
+        static func admin<Content: View>(outlet: Outlet<Content>) -> AdminLayout<Content> {
+          AdminLayout(outlet: outlet)
+        }
+
+        @Route("/files/.well-known/...")
+        static func dotted() -> RawPage {
+          RawPage()
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(
+      expansion.diagnostics,
+      [
+        "Route path segment `..` is a dot segment, which browsers remove from URLs.",
+        "Route path segment `%2E` is a dot segment, which browsers remove from URLs.",
+        "Route path segment `.` is a dot segment, which browsers remove from URLs.",
+      ]
     )
   }
 
   func testRouteMarkerMacrosRequireStaticFunctions() {
     assertMacroExpansion(
       """
-      @Routes
       struct AppRoutes {
-        @Route("/valid")
-        static func valid() -> ValidPage {
-          ValidPage()
-        }
-
         @Route("/users/:id")
         func user(id: Int) -> UserPage {
           UserPage()
@@ -282,9 +269,6 @@ final class RoutesMacroTests: XCTestCase {
       expandedSource:
         """
         struct AppRoutes {
-          static func valid() -> ValidPage {
-            ValidPage()
-          }
           func user(id: Int) -> UserPage {
             UserPage()
           }
@@ -297,233 +281,27 @@ final class RoutesMacroTests: XCTestCase {
           func routeError(context: RouteErrorContext) -> ErrorPage {
             ErrorPage()
           }
-
-          @View
-            struct RouteView {
-              enum Storage {
-                case valid
-              }
-
-              let storage: Storage
-
-              init(storage: Storage) {
-                self.storage = storage
-              }
-
-              var body: some View {
-                switch storage {
-                      case .valid:
-                  AppRoutes.valid()
-                }
-              }
-            }
-
-          struct Handles {
-              let valid: RouteHandle
-
-              init(valid: RouteHandle) {
-                self.valid = valid
-              }
-            }
-
-          struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
-
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
-
-              func router() -> Router<RouteView> {
-                Router(routes: tree)
-              }
-
-              func validHref(hash: String = "") throws(RouteMatchError) -> String {
-              let params = RouteValues()
-              let query = RouteValues()
-              return try tree._href(to: handles.valid, params: params, query: query, hash: hash)
-            }
-            }
-
-          static let _routerEnvironmentKey = EnvironmentValues._Key<Router<RouteView>?>(
-              "ElementaryRouter.AppRoutes.router",
-              defaultValue: nil
-            )
-
-          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
-              "ElementaryRouter.AppRoutes.routes",
-              defaultValue: nil
-            )
-
-          @View
-            struct Provider<Content: View> {
-              let routes: RouteSet
-              let router: Router<RouteView>
-              let content: Content
-
-              init(_ routes: RouteSet, router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
-                precondition(
-                  router._uses(routes.tree),
-                  "AppRoutes.Provider requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-                self.content = content()
-              }
-
-              var body: some View {
-                content.environment(AppRoutes._routerEnvironmentKey, router)
-                  .environment(AppRoutes._routeSetEnvironmentKey, routes)
-              }
-            }
-
-          @View
-            struct RouterView {
-              let routes: RouteSet
-              let router: Router<RouteView>
-
-              init() {
-                do throws(RouteTreeError) {
-                  let routes = try AppRoutes.routes()
-                  self.routes = routes
-                  self.router = routes.router()
-                } catch {
-                  preconditionFailure("AppRoutes.RouterView could not build routes.")
-                }
-              }
-
-              init(_ routes: RouteSet, router: Router<RouteView>) {
-                precondition(
-                  router._uses(routes.tree),
-                  "AppRoutes.RouterView requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-              }
-
-              var body: some View {
-                Provider(routes, router: router) {
-                  rendered
-                }
-              }
-
-              private var rendered: RouteView {
-                do {
-                  return try router.renderCurrentRoute()
-                } catch {
-                  preconditionFailure("AppRoutes.RouterView could not render the current route.")
-                }
-              }
-            }
-
-          @View
-            struct Link<Content: View> {
-              @Environment(AppRoutes._routerEnvironmentKey) var router
-
-              let route: RouteHandle
-              let params: RouteValues
-              let query: RouteValues
-              let hash: String
-              let replace: Bool
-              let target: HTMLAttributeValue.Target?
-              let content: Content
-
-              init(
-                to route: RouteHandle,
-                params: RouteValues = RouteValues(),
-                query: RouteValues = RouteValues(),
-                hash: String = "",
-                replace: Bool = false,
-                target: HTMLAttributeValue.Target? = nil,
-                @HTMLBuilder content: () -> Content
-              ) {
-                self.route = route
-                self.params = params
-                self.query = query
-                self.hash = hash
-                self.replace = replace
-                self.target = target
-                self.content = content()
-              }
-
-              var body: some View {
-                if let target {
-                  a(.href(href), .target(target), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                } else {
-                  a(.href(href), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                }
-              }
-
-              private func handleClick(_ event: MouseEvent) {
-                guard
-                  event.button == 0,
-                  !event.altKey,
-                  !event.ctrlKey,
-                  !event.metaKey,
-                  !event.shiftKey,
-                  target == nil || target?.rawValue == "" || target?.rawValue == "_self"
-                else {
-                  return
-                }
-
-                try? router?.navigate(
-                  to: route,
-                  params: params,
-                  query: query,
-                  hash: hash,
-                  replace: replace
-                )
-              }
-
-              private var href: String {
-                (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
-              }
-            }
-
-          static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteBuilder<RouteView>()
-
-                  let valid = collection._route("/valid", parent: nil) {
-                RouteView(storage: .valid)
-              }
-
-              return RouteSet(
-                tree: try collection._build(),
-                handles: Handles(valid: valid)
-              )
-            }
         }
         """,
       diagnostics: [
         DiagnosticSpec(
           message: "`@Route` can only be attached to a static function.",
-          line: 8,
+          line: 2,
           column: 3
         ),
         DiagnosticSpec(
           message: "`@Layout` can only be attached to a static function.",
-          line: 13,
+          line: 7,
           column: 3
         ),
         DiagnosticSpec(
           message: "`@NotFound` can only be attached to a static function.",
-          line: 18,
+          line: 12,
           column: 3
         ),
         DiagnosticSpec(
           message: "`@RouteError` can only be attached to a static function.",
-          line: 23,
+          line: 17,
           column: 3
         ),
       ],
@@ -532,8 +310,34 @@ final class RoutesMacroTests: XCTestCase {
     )
   }
 
-  func testRoutesMacroExpansionReportsMissingPathParameter() {
-    assertMacroExpansion(
+  func testRoutesMacroIgnoresNonStaticRouteFunctions() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes
+      struct AppRoutes {
+        @Route("/valid")
+        static func valid() -> ValidPage {
+          ValidPage()
+        }
+
+        @Route("/users/:id")
+        func user(id: Int) -> UserPage {
+          UserPage()
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    XCTAssertTrue(
+      expansion.source.contains(#"func valid(hash: String = "") -> RouteDestination<RouteView> {"#),
+      expansion.source
+    )
+    XCTAssertFalse(expansion.source.contains("func user("), expansion.source)
+  }
+
+  func testRoutesMacroExpansionReportsMissingPathParameter() throws {
+    let expansion = try expandRoutes(
       """
       @Routes
       struct AppRoutes {
@@ -542,461 +346,10 @@ final class RoutesMacroTests: XCTestCase {
           UserPage()
         }
       }
-      """,
-      expandedSource:
-        """
-        struct AppRoutes {
-          static func user() -> UserPage {
-            UserPage()
-          }
-
-          @View
-            struct RouteView {
-              enum Storage {
-                case user
-              }
-
-              let storage: Storage
-
-              init(storage: Storage) {
-                self.storage = storage
-              }
-
-              var body: some View {
-                switch storage {
-                      case .user:
-                  AppRoutes.user()
-                }
-              }
-            }
-
-          struct Handles {
-              let user: RouteHandle
-
-              init(user: RouteHandle) {
-                self.user = user
-              }
-            }
-
-          struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
-
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
-
-              func router() -> Router<RouteView> {
-                Router(routes: tree)
-              }
-
-              func userHref(hash: String = "") throws(RouteMatchError) -> String {
-              let params = RouteValues()
-              let query = RouteValues()
-              return try tree._href(to: handles.user, params: params, query: query, hash: hash)
-            }
-            }
-
-          static let _routerEnvironmentKey = EnvironmentValues._Key<Router<RouteView>?>(
-              "ElementaryRouter.AppRoutes.router",
-              defaultValue: nil
-            )
-
-          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
-              "ElementaryRouter.AppRoutes.routes",
-              defaultValue: nil
-            )
-
-          @View
-            struct Provider<Content: View> {
-              let routes: RouteSet
-              let router: Router<RouteView>
-              let content: Content
-
-              init(_ routes: RouteSet, router: Router<RouteView>, @HTMLBuilder content: () -> Content) {
-                precondition(
-                  router._uses(routes.tree),
-                  "AppRoutes.Provider requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-                self.content = content()
-              }
-
-              var body: some View {
-                content.environment(AppRoutes._routerEnvironmentKey, router)
-                  .environment(AppRoutes._routeSetEnvironmentKey, routes)
-              }
-            }
-
-          @View
-            struct RouterView {
-              let routes: RouteSet
-              let router: Router<RouteView>
-
-              init() {
-                do throws(RouteTreeError) {
-                  let routes = try AppRoutes.routes()
-                  self.routes = routes
-                  self.router = routes.router()
-                } catch {
-                  preconditionFailure("AppRoutes.RouterView could not build routes.")
-                }
-              }
-
-              init(_ routes: RouteSet, router: Router<RouteView>) {
-                precondition(
-                  router._uses(routes.tree),
-                  "AppRoutes.RouterView requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-              }
-
-              var body: some View {
-                Provider(routes, router: router) {
-                  rendered
-                }
-              }
-
-              private var rendered: RouteView {
-                do {
-                  return try router.renderCurrentRoute()
-                } catch {
-                  preconditionFailure("AppRoutes.RouterView could not render the current route.")
-                }
-              }
-            }
-
-          @View
-            struct Link<Content: View> {
-              @Environment(AppRoutes._routerEnvironmentKey) var router
-
-              let route: RouteHandle
-              let params: RouteValues
-              let query: RouteValues
-              let hash: String
-              let replace: Bool
-              let target: HTMLAttributeValue.Target?
-              let content: Content
-
-              init(
-                to route: RouteHandle,
-                params: RouteValues = RouteValues(),
-                query: RouteValues = RouteValues(),
-                hash: String = "",
-                replace: Bool = false,
-                target: HTMLAttributeValue.Target? = nil,
-                @HTMLBuilder content: () -> Content
-              ) {
-                self.route = route
-                self.params = params
-                self.query = query
-                self.hash = hash
-                self.replace = replace
-                self.target = target
-                self.content = content()
-              }
-
-              var body: some View {
-                if let target {
-                  a(.href(href), .target(target), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                } else {
-                  a(.href(href), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                }
-              }
-
-              private func handleClick(_ event: MouseEvent) {
-                guard
-                  event.button == 0,
-                  !event.altKey,
-                  !event.ctrlKey,
-                  !event.metaKey,
-                  !event.shiftKey,
-                  target == nil || target?.rawValue == "" || target?.rawValue == "_self"
-                else {
-                  return
-                }
-
-                try? router?.navigate(
-                  to: route,
-                  params: params,
-                  query: query,
-                  hash: hash,
-                  replace: replace
-                )
-              }
-
-              private var href: String {
-                (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
-              }
-            }
-
-          static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteBuilder<RouteView>()
-
-                  let user = collection._route("/users/:id", parent: nil) {
-                RouteView(storage: .user)
-              }
-
-              return RouteSet(
-                tree: try collection._build(),
-                handles: Handles(user: user)
-              )
-            }
-        }
-        """,
-      diagnostics: [
-        DiagnosticSpec(
-          message: "Missing function parameter for path parameter `id`.",
-          line: 3,
-          column: 3
-        )
-      ],
-      macros: testMacros,
-      indentationWidth: .spaces(2)
-    )
-  }
-
-  func testRoutesMacroExpansionSupportsHashMode() {
-    assertMacroExpansion(
       """
-      @Routes(mode: .hash)
-      struct DocsRoutes {
-        @Route("/docs/*")
-        static func docs(splat: Wildcard) -> DocsPage {
-          DocsPage(slug: splat.value)
-        }
-      }
-      """,
-      expandedSource:
-        """
-        struct DocsRoutes {
-          static func docs(splat: Wildcard) -> DocsPage {
-            DocsPage(slug: splat.value)
-          }
-
-          @View
-            struct RouteView {
-              enum Storage {
-                case docs(splat: String)
-              }
-
-              let storage: Storage
-
-              init(storage: Storage) {
-                self.storage = storage
-              }
-
-              var body: some View {
-                switch storage {
-                      case .docs(let splat):
-                  DocsRoutes.docs(splat: Wildcard(splat))
-                }
-              }
-            }
-
-          struct Handles {
-              let docs: RouteHandle
-
-              init(docs: RouteHandle) {
-                self.docs = docs
-              }
-            }
-
-          struct RouteSet {
-              let tree: RouteTree<RouteView>
-              let handles: Handles
-
-              init(tree: RouteTree<RouteView>, handles: Handles) {
-                self.tree = tree
-                self.handles = handles
-              }
-
-              func router() -> HashRouter<RouteView> {
-                HashRouter(routes: tree)
-              }
-
-              func docsHref(splat: String, hash: String = "") throws(RouteMatchError) -> String {
-              let params: RouteValues = ["*": RouteValues.ValueLiteral(splat)]
-              let query = RouteValues()
-              return try tree._hashHref(to: handles.docs, params: params, query: query, hash: hash)
-            }
-            }
-
-          static let _routerEnvironmentKey = EnvironmentValues._Key<HashRouter<RouteView>?>(
-              "ElementaryRouter.DocsRoutes.router",
-              defaultValue: nil
-            )
-
-          static let _routeSetEnvironmentKey = EnvironmentValues._Key<RouteSet?>(
-              "ElementaryRouter.DocsRoutes.routes",
-              defaultValue: nil
-            )
-
-          @View
-            struct Provider<Content: View> {
-              let routes: RouteSet
-              let router: HashRouter<RouteView>
-              let content: Content
-
-              init(_ routes: RouteSet, router: HashRouter<RouteView>, @HTMLBuilder content: () -> Content) {
-                precondition(
-                  router._uses(routes.tree),
-                  "DocsRoutes.Provider requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-                self.content = content()
-              }
-
-              var body: some View {
-                content.environment(DocsRoutes._routerEnvironmentKey, router)
-                  .environment(DocsRoutes._routeSetEnvironmentKey, routes)
-              }
-            }
-
-          @View
-            struct RouterView {
-              let routes: RouteSet
-              let router: HashRouter<RouteView>
-
-              init() {
-                do throws(RouteTreeError) {
-                  let routes = try DocsRoutes.routes()
-                  self.routes = routes
-                  self.router = routes.router()
-                } catch {
-                  preconditionFailure("DocsRoutes.RouterView could not build routes.")
-                }
-              }
-
-              init(_ routes: RouteSet, router: HashRouter<RouteView>) {
-                precondition(
-                  router._uses(routes.tree),
-                  "DocsRoutes.RouterView requires a router created by the same RouteSet."
-                )
-                self.routes = routes
-                self.router = router
-              }
-
-              var body: some View {
-                Provider(routes, router: router) {
-                  rendered
-                }
-              }
-
-              private var rendered: RouteView {
-                do {
-                  return try router.renderCurrentRoute()
-                } catch {
-                  preconditionFailure("DocsRoutes.RouterView could not render the current route.")
-                }
-              }
-            }
-
-          @View
-            struct Link<Content: View> {
-              @Environment(DocsRoutes._routerEnvironmentKey) var router
-
-              let route: RouteHandle
-              let params: RouteValues
-              let query: RouteValues
-              let hash: String
-              let replace: Bool
-              let target: HTMLAttributeValue.Target?
-              let content: Content
-
-              init(
-                to route: RouteHandle,
-                params: RouteValues = RouteValues(),
-                query: RouteValues = RouteValues(),
-                hash: String = "",
-                replace: Bool = false,
-                target: HTMLAttributeValue.Target? = nil,
-                @HTMLBuilder content: () -> Content
-              ) {
-                self.route = route
-                self.params = params
-                self.query = query
-                self.hash = hash
-                self.replace = replace
-                self.target = target
-                self.content = content()
-              }
-
-              var body: some View {
-                if let target {
-                  a(.href(href), .target(target), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                } else {
-                  a(.href(href), .data("router-link", value: "true")) {
-                    content
-                  }
-                  .onClick { event in
-                    handleClick(event)
-                  }
-                }
-              }
-
-              private func handleClick(_ event: MouseEvent) {
-                guard
-                  event.button == 0,
-                  !event.altKey,
-                  !event.ctrlKey,
-                  !event.metaKey,
-                  !event.shiftKey,
-                  target == nil || target?.rawValue == "" || target?.rawValue == "_self"
-                else {
-                  return
-                }
-
-                try? router?.navigate(
-                  to: route,
-                  params: params,
-                  query: query,
-                  hash: hash,
-                  replace: replace
-                )
-              }
-
-              private var href: String {
-                (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
-              }
-            }
-
-          static func routes() throws(RouteTreeError) -> RouteSet {
-              let collection = RouteBuilder<RouteView>()
-
-                  let docs = collection._route("/docs/*", parent: nil) { context throws(RouteValueError) in
-                RouteView(storage: .docs(splat: try context.params.require("*", String.self)))
-              }
-
-              return RouteSet(
-                tree: try collection._build(),
-                handles: Handles(docs: docs)
-              )
-            }
-        }
-        """,
-      macros: testMacros,
-      indentationWidth: .spaces(2)
     )
+
+    XCTAssertEqual(expansion.diagnostics, ["Missing function parameter for path parameter `id`."])
   }
 
   func testRoutesMacroRegistersNestedLayoutsAsParentChain() throws {
@@ -1070,24 +423,6 @@ final class RoutesMacroTests: XCTestCase {
       XCTAssertGreaterThanOrEqual(range.lowerBound, previousOffset, registration)
       previousOffset = range.lowerBound
     }
-  }
-
-  func testRoutesMacroGeneratesHashHrefHelpersForHashMode() throws {
-    let expansion = try expandRoutes(
-      """
-      @Routes(mode: .hash)
-      struct AppRoutes {
-        @Route("/users/:id")
-        static func user(id: Int) -> UserPage {
-          UserPage()
-        }
-      }
-      """
-    )
-
-    XCTAssertEqual(expansion.diagnostics, [])
-    XCTAssertTrue(expansion.source.contains("tree._hashHref(to: handles.user"))
-    XCTAssertFalse(expansion.source.contains("tree._href("))
   }
 
   func testRoutesMacroReportsStructurallyIndistinguishableRoutes() throws {
@@ -1215,6 +550,10 @@ private func expandRoutes(_ source: String) throws -> RoutesExpansion {
     conformingTo: [],
     in: context
   )
+  // Generated members are parsed back into syntax; a template mistake shows up as a syntax error.
+  for member in members where member.hasError {
+    XCTFail("Generated member has syntax errors:\n\(member.description)")
+  }
   return RoutesExpansion(
     source: members.map(\.description).joined(separator: "\n"),
     diagnostics: context.diagnostics.map(\.message)

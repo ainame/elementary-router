@@ -137,10 +137,11 @@ struct HashMacroRoutes {
 
   #expect(router.currentRoute == routeSet.handles.user)
   #expect(router.currentParams?.get("id") == "42")
-  #expect(try routeSet.userHref(id: 42) == "/users/42")
-  #expect(try routeSet.userHref(id: 42, tab: "posts") == "/users/42?tab=posts")
+  #expect(try routeSet.href(to: routeSet.user(id: 42)) == "/users/42")
+  #expect(try routeSet.href(to: routeSet.user(id: 42, tab: "posts")) == "/users/42?tab=posts")
   #expect(
-    try routeSet.fileHref(splat: "docs/readme", hash: "install") == "/files/docs/readme#install"
+    try routeSet.href(to: routeSet.file(splat: "docs/readme", hash: "install"))
+      == "/files/docs/readme#install"
   )
 }
 
@@ -154,7 +155,7 @@ struct HashMacroRoutes {
   #expect(router.matchedRoutes == [routeSet.handles.teamLayout, routeSet.handles.member])
   #expect(router.currentParams?.get("teamID") == "7")
   #expect(router.currentParams?.get("memberID") == "42")
-  #expect(try routeSet.memberHref(teamID: 7, memberID: 42) == "/teams/7/members/42")
+  #expect(try routeSet.member(teamID: 7, memberID: 42).location.href == "/teams/7/members/42")
 
   _ = try router.renderCurrentRoute()
 
@@ -179,7 +180,9 @@ struct HashMacroRoutes {
   #expect(!router.isActive(handles.language))
   #expect(router.isActive(handles.language, options: .descendant))
   #expect(router.isActive(handles.team, options: .init(includeDescendants: true, params: ["teamID": 7])))
-  #expect(try routes.memberHref(lang: "en", teamID: 7, memberID: 42) == "/en/teams/7/members/42")
+  #expect(
+    try routes.member(lang: "en", teamID: 7, memberID: 42).location.href == "/en/teams/7/members/42"
+  )
 
   if case .matched(let context) = routes.tree._resolve(router.location) {
     #expect(context.matchedRoutes == router.matchedRoutes)
@@ -203,7 +206,7 @@ struct HashMacroRoutes {
   let router = MemoryRouter(routes: routes.tree, history: MemoryHistory(initialPath: "/en/teams/7"))
 
   #expect(router.matchedRoutes == [handles.shell, handles.language, handles.team, handles.teamIndex])
-  #expect(try routes.teamIndexHref(lang: "en", teamID: 7) == "/en/teams/7")
+  #expect(try routes.teamIndex(lang: "en", teamID: 7).location.href == "/en/teams/7")
 
   let rendered = try router.renderCurrentRoute()
   if case .teamIndex(let lang, let teamID) = rendered.storage {
@@ -494,8 +497,8 @@ struct HashMacroRoutes {
 
   #expect(first.handles.home != second.handles.home)
   #expect(!first.tree._isSameTree(as: second.tree))
-  #expect(try first.userHref(id: 42) == "/users/42")
-  #expect(try second.userHref(id: 42) == "/users/42")
+  #expect(try first.user(id: 42).location.href == "/users/42")
+  #expect(try second.user(id: 42).location.href == "/users/42")
 
   let router = second.router()
   #expect(router._uses(second.tree))
@@ -1403,10 +1406,12 @@ private func buildError(
     history: HashHistory(base: MemoryHistory(initialPath: "/app/"))
   )
 
-  #expect(try routeSet.homeHref() == "#/")
-  #expect(try routeSet.userHref(id: 42, tab: "posts", hash: "bio") == "#/users/42?tab=posts#bio")
+  #expect(try routeSet.href(to: routeSet.home()) == "#/")
   #expect(
-    try routeSet.userHref(id: 42, tab: "posts", hash: "bio")
+    try routeSet.href(to: routeSet.user(id: 42, tab: "posts", hash: "bio")) == "#/users/42?tab=posts#bio"
+  )
+  #expect(
+    try routeSet.href(to: routeSet.user(id: 42, tab: "posts", hash: "bio"))
       == router.href(
         to: routeSet.handles.user,
         params: ["id": 42],

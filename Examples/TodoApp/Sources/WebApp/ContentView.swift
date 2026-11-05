@@ -9,8 +9,6 @@ struct ContentView<Content: View> {
   let outlet: Outlet<Content>
 
   var body: some View {
-    let routes = routeSet
-
     div(.style(pageStyle)) {
       header(.style(headerStyle)) {
         div {
@@ -22,11 +20,16 @@ struct ContentView<Content: View> {
         }
       }
 
-      nav(.style(navStyle)) {
-        FilterLink(title: "All", route: routes.handles.allTasks)
-        FilterLink(title: "Active", route: routes.handles.activeTasks)
-        FilterLink(title: "Completed", route: routes.handles.completedTasks)
-        FilterLink(title: "Stats", route: routes.handles.stats)
+      // This layout renders below `AppRoutes.RouterView`, which provides the route set. Without a
+      // provider there is no route set to build destinations from, so no navigation is shown.
+      if let routes {
+        nav(.style(navStyle)) {
+          // Static routes have non-throwing destination factories.
+          FilterLink(title: "All", destination: routes.allTasks())
+          FilterLink(title: "Active", destination: routes.activeTasks())
+          FilterLink(title: "Completed", destination: routes.completedTasks())
+          FilterLink(title: "Stats", destination: routes.stats())
+        }
       }
 
       main(.style(mainStyle)) {
@@ -34,12 +37,5 @@ struct ContentView<Content: View> {
       }
     }
     .environment(#Key(\.todoRouteSet), routes)
-  }
-
-  private var routeSet: AppRoutes.RouteSet {
-    guard let routes else {
-      preconditionFailure("ContentView requires AppRoutes.RouterView or AppRoutes.Provider.")
-    }
-    return routes
   }
 }

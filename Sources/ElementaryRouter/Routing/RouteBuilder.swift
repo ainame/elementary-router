@@ -13,6 +13,10 @@ public enum RouteTreeError: Error, Equatable, Sendable {
   case duplicateParameter(path: String, name: String)
   /// A path pattern used `*` before its final segment.
   case invalidWildcard(path: String)
+  /// A path pattern contained a static `.` or `..` segment, including `%2E` forms.
+  ///
+  /// Browsers resolve dot segments before routing, so such a route could never be reached.
+  case dotSegment(path: String)
   /// A route or layout declared at `path` named a parent handle registered by a different
   /// `RouteBuilder`.
   case foreignParent(path: String)

@@ -25,10 +25,10 @@ npm run build
 ## Routes
 
 - `/`
-- `/:lang/profile/:profileId`
+- `/:lang/profile/:profileId?tab=posts`
 - `/docs/*#install`
 
-The example declares routes with `@Routes`. The macro generates `AppRoutes.RouteView`, `AppRoutes.RouteSet`, and route handles for `Link` and programmatic navigation.
+The example declares routes with `@Routes`. The macro generates `AppRoutes.RouteView`, `AppRoutes.RouteSet`, and a typed destination factory per route, such as `routes.profile(lang: "ja", profileId: 42, tab: "posts")`. The same destination drives `AppRoutes.Link`, the active-link highlight from `router.isActive(_:)`, and the "Open profile 7" button's `router.navigate(to:)`. Destinations with path values can fail to build, so the navigation renders that failure explicitly instead of trapping in a view body.
 
 `/:lang` is declared as a typed `@Layout` route, and `/:lang/profile/:profileId` is rendered through that layout with `Outlet<Content>`.
 

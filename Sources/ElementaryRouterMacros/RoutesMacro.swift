@@ -49,6 +49,7 @@ public enum RoutesMacro: MemberMacro {
 
         let route = RouteDeclaration(function: function, path: path)
         validate(route: route, context: context)
+        validateDestinationFactory(for: route, context: context)
         validateUnique(route, against: routes, context: context)
         routes.append(route)
       }
@@ -122,8 +123,8 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: routeSetDeclaration(
           access: access,
           mode: mode,
-          routes: routes,
-          layouts: layouts
+          containerName: containerName,
+          routes: routes
         )
       ),
       DeclSyntax(
@@ -153,6 +154,7 @@ public enum RoutesMacro: MemberMacro {
       DeclSyntax(
         stringLiteral: linkDeclaration(
           access: access,
+          mode: mode,
           containerName: containerName
         )
       ),
@@ -440,6 +442,44 @@ private func validate(route: RouteDeclaration, context: some MacroExpansionConte
       .init(node: Syntax(route.function), message: RoutesDiagnostic.wildcardMustBeLast)
     )
   }
+
+  // Browsers resolve `.` and `..`, including `%2E` forms, before the router sees the path.
+  for segment in segments where segment.first != ":" && segment != "*" {
+    let decoded = percentDecoded(segment)
+    if decoded == "." || decoded == ".." {
+      context.diagnose(
+        .init(
+          node: Syntax(route.function),
+          message: RoutesDiagnostic.dotSegment(segment: segment)
+        )
+      )
+    }
+  }
+}
+
+/// Members of the generated `RouteSet` that a destination factory must not shadow.
+private let reservedRouteSetNames: Set<String> = ["tree", "handles", "router", "href"]
+
+/// Rejects routes whose generated destination factory would collide with other generated API.
+private func validateDestinationFactory(
+  for route: RouteDeclaration,
+  context: some MacroExpansionContext
+) {
+  if reservedRouteSetNames.contains(route.name) {
+    context.diagnose(
+      .init(
+        node: Syntax(route.function),
+        message: RoutesDiagnostic.reservedRouteName(name: route.name)
+      )
+    )
+  }
+
+  // Every factory takes a trailing `hash:` argument for the URL fragment.
+  if route.storageParameters.contains(where: { $0.label == "hash" }) {
+    context.diagnose(
+      .init(node: Syntax(route.function), message: RoutesDiagnostic.reservedHashParameter)
+    )
+  }
 }
 
 /// Rejects a declaration that matches exactly the same URLs as an earlier one of the same kind.
@@ -660,11 +700,12 @@ private func handlesDeclaration(
 private func routeSetDeclaration(
   access: String,
   mode: RoutesMode,
-  routes: [RouteDeclaration],
-  layouts: [RouteDeclaration]
+  containerName: String,
+  routes: [RouteDeclaration]
 ) -> String {
-  let hrefs = (layouts + routes).map {
-    hrefFunctionDeclaration(access: access, mode: mode, route: $0)
+  // Layouts never match a location on their own, so only routes get destination factories.
+  let factories = routes.map {
+    destinationFactoryDeclaration(access: access, containerName: containerName, route: $0)
   }
   .joined(separator: "\n\n")
   let routerType = routerType(mode: mode, routeViewType: "RouteView")
@@ -684,7 +725,95 @@ private func routeSetDeclaration(
           \(routerInitializer)
         }
 
-      \(hrefs)
+        \(access)func href(to destination: RouteDestination<RouteView>) throws(RouteMatchError) -> String {
+          try tree._validate(destination)
+          return \(destinationHrefExpression(mode: mode, destination: "destination"))
+        }
+
+      \(factories)
+      }
+    """
+}
+
+/// The href a generated link or route set uses for `destination` in the declared mode.
+///
+/// It matches `Router.href(to:)` and `HashRouter.href(to:)`, without needing a router.
+private func destinationHrefExpression(mode: RoutesMode, destination: String) -> String {
+  switch mode {
+  case .path:
+    return "\(destination).location.href"
+  case .hash:
+    return "\"#\" + \(destination).location.href"
+  }
+}
+
+/// Query value types whose encoding always decodes again.
+private let builtInRouteValueTypes: Set<String> = ["String", "Int", "Double", "Bool"]
+
+/// Returns `true` when a route's destination factory can never fail.
+///
+/// A route with no path or wildcard values has a static path, which matching precedence never
+/// lets another route claim. Built-in query values always round-trip. Any path value can be
+/// empty, invalid for a custom `RouteValue`, or claimed by a static sibling route, so routes with
+/// path values get throwing factories.
+private func hasInfallibleDestination(_ route: RouteDeclaration) -> Bool {
+  route.storageParameters.allSatisfy { parameter in
+    parameter.kind == .query && builtInRouteValueTypes.contains(parameter.storageType)
+  }
+}
+
+private func destinationFactoryDeclaration(
+  access: String,
+  containerName: String,
+  route: RouteDeclaration
+) -> String {
+  let pathParameters = route.storageParameters.filter {
+    $0.kind == .path || $0.kind == .wildcard
+  }
+  let queryParameters = route.queryParameters
+
+  let parameters = (pathParameters + queryParameters).map { parameter in
+    if parameter.kind == .query, parameter.queryDefaultValue != nil {
+      return "\(parameter.label): \(parameter.storageType)? = nil"
+    }
+    return "\(parameter.label): \(parameter.storageType)"
+  }
+  let signatureParameters = (parameters + ["hash: String = \"\""]).joined(separator: ", ")
+
+  // Values are chained onto one expression, so parameter names never collide with locals.
+  let params = pathParameters.reduce("RouteValues()") { expression, parameter in
+    let key = parameter.kind == .wildcard ? "*" : parameter.label
+    return "\(expression)._setting(\"\(key)\", \(parameter.label))"
+  }
+  let query = queryParameters.reduce("RouteValues()") { expression, parameter in
+    // An omitted defaulted query value stays out of the URL; the route reads its default.
+    let method = parameter.queryDefaultValue == nil ? "_setting" : "_settingIfPresent"
+    return "\(expression).\(method)(\"\(parameter.label)\", \(parameter.label))"
+  }
+  let build = """
+    try self.tree._destination(
+              to: self.handles.\(route.name),
+              params: \(params),
+              query: \(query),
+              hash: hash
+            )
+    """
+
+  if hasInfallibleDestination(route) {
+    return """
+        \(access)func \(route.name)(\(signatureParameters)) -> RouteDestination<RouteView> {
+          do throws(RouteMatchError) {
+            return \(build)
+          } catch {
+            preconditionFailure("\(containerName).RouteSet.\(route.name) failed to build a static destination.")
+          }
+        }
+      """
+  }
+
+  return """
+      \(access)func \(route.name)(\(signatureParameters)) throws(RouteMatchError) -> RouteDestination<RouteView> {
+        \(build)
       }
     """
 }
@@ -771,6 +900,7 @@ private func routerViewDeclaration(
 
 private func linkDeclaration(
   access: String,
+  mode: RoutesMode,
   containerName: String
 ) -> String {
   return """
@@ -778,27 +908,18 @@ private func linkDeclaration(
       \(access)struct Link<Content: View> {
         @Environment(\(containerName)._routerEnvironmentKey) var router
 
-        let route: RouteHandle
-        let params: RouteValues
-        let query: RouteValues
-        let hash: String
+        let destination: RouteDestination<RouteView>
         let replace: Bool
         let target: HTMLAttributeValue.Target?
         let content: Content
 
         \(access)init(
-          to route: RouteHandle,
-          params: RouteValues = RouteValues(),
-          query: RouteValues = RouteValues(),
-          hash: String = "",
+          to destination: RouteDestination<RouteView>,
           replace: Bool = false,
           target: HTMLAttributeValue.Target? = nil,
           @HTMLBuilder content: () -> Content
         ) {
-          self.route = route
-          self.params = params
-          self.query = query
-          self.hash = hash
+          self.destination = destination
           self.replace = replace
           self.target = target
           self.content = content()
@@ -806,20 +927,33 @@ private func linkDeclaration(
 
         \(access)var body: some View {
           if let target {
-            a(.href(href), .target(target), .data("router-link", value: "true")) {
+            a(.href(href), .target(target)) {
               content
             }
+            .attributes(.data("router-link", value: "true"), when: usesClientNavigation)
             .onClick { event in
               handleClick(event)
             }
           } else {
-            a(.href(href), .data("router-link", value: "true")) {
+            a(.href(href)) {
               content
             }
+            .attributes(.data("router-link", value: "true"), when: usesClientNavigation)
             .onClick { event in
               handleClick(event)
             }
           }
+        }
+
+        /// The destination href in this route set's mode, which does not depend on a router.
+        var href: String {
+          \(destinationHrefExpression(mode: mode, destination: "destination"))
+        }
+
+        /// Client navigation needs a provided router that accepts the destination. Otherwise the
+        /// anchor is left to normal browser navigation to the same href.
+        private var usesClientNavigation: Bool {
+          router?._accepts(destination) ?? false
         }
 
         private func handleClick(_ event: MouseEvent) {
@@ -829,22 +963,18 @@ private func linkDeclaration(
             !event.ctrlKey,
             !event.metaKey,
             !event.shiftKey,
-            target == nil || target?.rawValue == "" || target?.rawValue == "_self"
+            target == nil || target?.rawValue == "" || target?.rawValue == "_self",
+            let router,
+            router._accepts(destination)
           else {
             return
           }
 
-          try? router?.navigate(
-            to: route,
-            params: params,
-            query: query,
-            hash: hash,
-            replace: replace
-          )
-        }
-
-        private var href: String {
-          (try? router?.href(to: route, params: params, query: query, hash: hash)) ?? "#"
+          do throws(RouteMatchError) {
+            try router.navigate(to: destination, replace: replace)
+          } catch {
+            assertionFailure("\(containerName).Link could not navigate to an accepted destination.")
+          }
         }
       }
     """
@@ -1027,78 +1157,6 @@ private func registrationParent(parent: RouteDeclaration?) -> String {
   return parent.name
 }
 
-private func hrefFunctionDeclaration(
-  access: String,
-  mode: RoutesMode,
-  route: RouteDeclaration
-) -> String {
-  let pathParameters = route.storageParameters.filter {
-    $0.kind == .path || $0.kind == .wildcard
-  }
-  let queryParameters = route.queryParameters
-
-  let parameters = (pathParameters + queryParameters).map { parameter in
-    if parameter.kind == .query, parameter.queryDefaultValue != nil {
-      return "\(parameter.label): \(parameter.storageType)? = nil"
-    }
-    return "\(parameter.label): \(parameter.storageType)"
-  }
-
-  let signatureParameters = (parameters + ["hash: String = \"\""]).joined(separator: ", ")
-
-  let pathPairs = pathParameters.map { parameter in
-    let key = parameter.kind == .wildcard ? "*" : parameter.label
-    return "\"\(key)\": RouteValues.ValueLiteral(\(parameter.label))"
-  }.joined(separator: ", ")
-
-  let paramsBuilder: String
-  if pathPairs.isEmpty {
-    paramsBuilder = "let params = RouteValues()"
-  } else {
-    paramsBuilder = "let params: RouteValues = [\(pathPairs)]"
-  }
-
-  let queryBuilder: String
-  if queryParameters.isEmpty {
-    queryBuilder = "let query = RouteValues()"
-  } else {
-    let lines = queryParameters.map { parameter in
-      if parameter.queryDefaultValue != nil {
-        return """
-              if let \(parameter.label) {
-                query = query.set("\(parameter.label)", \(parameter.label))
-              }
-          """
-      }
-      return """
-            query = query.set("\(parameter.label)", \(parameter.label))
-        """
-    }.joined(separator: "\n")
-
-    queryBuilder = """
-        var query = RouteValues()
-        \(lines)
-      """
-  }
-
-  // Hash-mode helpers return the same fragment hrefs as `HashRouter.href(to:)`.
-  let hrefMethod: String
-  switch mode {
-  case .path:
-    hrefMethod = "_href"
-  case .hash:
-    hrefMethod = "_hashHref"
-  }
-
-  return """
-      \(access)func \(route.name)Href(\(signatureParameters)) throws(RouteMatchError) -> String {
-        \(paramsBuilder)
-        \(queryBuilder)
-        return try tree.\(hrefMethod)(to: handles.\(route.name), params: params, query: query, hash: hash)
-      }
-    """
-}
-
 extension DeclGroupSyntax {
   fileprivate var accessModifier: String {
     for modifier in modifiers {
@@ -1169,6 +1227,9 @@ private enum RoutesDiagnostic: DiagnosticMessage {
   case duplicateNotFound
   case duplicateRouteError
   case unsupportedRoutesMode
+  case reservedRouteName(name: String)
+  case reservedHashParameter
+  case dotSegment(segment: String)
 
   var message: String {
     switch self {
@@ -1198,6 +1259,12 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "`@Routes` can only declare one `@RouteError` function."
     case .unsupportedRoutesMode:
       "`@Routes(mode:)` only supports `.path` and `.hash`."
+    case .reservedRouteName(let name):
+      "Route name `\(name)` is reserved by the generated `RouteSet`."
+    case .reservedHashParameter:
+      "Route parameter `hash` conflicts with the generated destination `hash:` argument."
+    case .dotSegment(let segment):
+      "Route path segment `\(segment)` is a dot segment, which browsers remove from URLs."
     }
   }
 

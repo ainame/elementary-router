@@ -62,3 +62,17 @@ let layoutStyle = [
   "display": "grid",
   "gap": "12px",
 ]
+
+let errorTextStyle = [
+  "margin": "0",
+  "color": "#b42318",
+]
+
+func linkStyle(isActive: Bool) -> [String: String] {
+  [
+    "padding": "2px 6px",
+    "border-radius": "4px",
+    "background": isActive ? "#e3ecfa" : "transparent",
+    "font-weight": isActive ? "600" : "400",
+  ]
+}

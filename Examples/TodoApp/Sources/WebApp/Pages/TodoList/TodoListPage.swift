@@ -45,10 +45,9 @@ struct TodoListPage {
       if visibleTasks.isEmpty {
         EmptyState(filter: filter)
       } else if let routeSet {
-        let detailRoute = routeSet.handles.todoDetail
         div(.style(listStyle)) {
           ForEach(visibleTasks, key: { $0.id }) { todo in
-            TodoRow(todo: todo, detailRoute: detailRoute)
+            TodoRow(todo: todo, routes: routeSet)
           }
         }
       }

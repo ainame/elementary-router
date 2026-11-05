@@ -4,17 +4,25 @@
 /// declarations. The macro generates:
 ///
 /// - `RouteView`: the typed view union rendered by this route set
-/// - `RouteSet`: the compiled route tree plus route handles, and `router()` to create either
-///   `Router<RouteView>` or `HashRouter<RouteView>` for them
-/// - `Handles`: strongly typed route handles for each declared route
+/// - `RouteSet`: the compiled route tree plus route handles, `router()` to create either
+///   `Router<RouteView>` or `HashRouter<RouteView>` for them, and one typed destination factory
+///   per `@Route`, such as `profile(lang:profileId:tab:hash:)`, returning
+///   `RouteDestination<RouteView>`
+/// - `Handles`: low-level route handles for each declared route and layout
 /// - `Provider`: a route-set-specific environment provider for a route set and its router
 /// - `RouterView`: a route-set-specific view that renders the current route
-/// - `Link`: a route-set-specific navigation view
+/// - `Link`: a route-set-specific navigation view for a `RouteDestination<RouteView>`
 /// - `routes()`: builds a route set
 ///
-/// Each `routes()` call registers a new set of handles. Handles from one route set are rejected
-/// by routers created from another, so keep the route set that created a router and pass both to
-/// `Provider` or `RouterView`.
+/// Destination factories take the route's path values, wildcard value, and query values with
+/// their declared types, so missing or mistyped arguments do not compile. A factory throws
+/// `RouteMatchError` when the values cannot produce a URL that resolves back to the route; a
+/// route without path or wildcard values and with only built-in query types gets a non-throwing
+/// factory. Layouts get no factory, because they never match a location on their own.
+///
+/// Each `routes()` call registers a new set of handles. Destinations and handles from one route
+/// set are rejected by routers created from another, so keep the route set that created a
+/// router and pass both to `Provider` or `RouterView`.
 ///
 /// `mode` selects whether generated links and routers use browser path routing or hash routing.
 @attached(

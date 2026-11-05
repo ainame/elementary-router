@@ -22,8 +22,12 @@ struct AppRoutes {
   }
 
   @Route("/:lang/profile/:profileId")
-  static func profile(lang: String, profileId: Int) -> ProfilePage {
-    ProfilePage(lang: lang, profileID: profileId)
+  static func profile(
+    lang: String,
+    profileId: Int,
+    tab: Query<String> = Query("overview")
+  ) -> ProfilePage {
+    ProfilePage(lang: lang, profileID: profileId, tab: tab.value)
   }
 
   @Route("/docs/*")

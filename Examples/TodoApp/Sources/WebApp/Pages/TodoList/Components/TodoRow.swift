@@ -6,7 +6,7 @@ struct TodoRow {
   @Environment(TodoStore.self) var store
 
   let todo: TodoItem
-  let detailRoute: RouteHandle
+  let routes: AppRoutes.RouteSet
 
   var body: some View {
     div(.style(rowStyle(isCompleted: todo.isCompleted))) {
@@ -18,11 +18,16 @@ struct TodoRow {
           )
         )
       div(.style(rowContentStyle)) {
-        AppRoutes.Link(
-          to: detailRoute,
-          params: ["todoID": RouteValues.ValueLiteral(todo.id)]
-        ) {
-          todo.title
+        // A path value can fail to build a destination, so the failure is rendered explicitly.
+        switch detailDestination {
+        case .success(let detail):
+          AppRoutes.Link(to: detail) {
+            todo.title
+          }
+        case .failure:
+          span(.style(errorTextStyle)) {
+            todo.title
+          }
         }
         span(.style(projectBadgeStyle)) {
           todo.project
@@ -35,6 +40,12 @@ struct TodoRow {
       .onClick {
         store.remove(id: todo.id)
       }
+    }
+  }
+
+  private var detailDestination: Result<RouteDestination<AppRoutes.RouteView>, RouteMatchError> {
+    Result { () throws(RouteMatchError) in
+      try routes.todoDetail(todoID: todo.id)
     }
   }
 }

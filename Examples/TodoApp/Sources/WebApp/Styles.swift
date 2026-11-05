@@ -203,3 +203,24 @@ let metricValueStyle = [
   "font-size": "28px",
   "font-weight": "760",
 ]
+
+let errorTextStyle = [
+  "margin": "0",
+  "color": "#b42318",
+]
+
+let detailActionsStyle = [
+  "display": "flex",
+  "align-items": "center",
+  "gap": "12px",
+  "margin-top": "16px",
+]
+
+func filterLinkStyle(isActive: Bool) -> [String: String] {
+  [
+    "padding": "4px 10px",
+    "border-radius": "999px",
+    "background": isActive ? "#e3ecfa" : "transparent",
+    "font-weight": isActive ? "600" : "400",
+  ]
+}

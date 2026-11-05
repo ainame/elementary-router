@@ -46,6 +46,14 @@ struct RoutePattern: Equatable, Sendable {
 
   private func match(_ path: String, allowPrefix: Bool) -> RouteValues? {
     let pathSegments = RoutePattern.pathSegments(RoutePattern.normalized(path))
+    // Browsers resolve dot segments, including `%2E` forms, before a path-mode router sees the
+    // URL. Rejecting them here keeps raw locations and hash fragments, which browsers leave
+    // as-is, from matching a route the same URL would never reach in path mode.
+    if pathSegments.contains(where: {
+      RoutePattern.isDotSegment(URLCoding.decode($0, plusIsSpace: false))
+    }) {
+      return nil
+    }
     var values = RouteValues()
     var patternIndex = 0
     var pathIndex = 0
@@ -87,13 +95,26 @@ struct RoutePattern: Equatable, Sendable {
         guard let value = params.get(name), !value.isEmpty else {
           throw RouteMatchError.missingRequiredParameter(name: name)
         }
+        // Percent-encoding cannot protect `.` or `..`: browsers also resolve `%2E` forms.
+        guard !RoutePattern.isDotSegment(value) else {
+          throw RouteMatchError.invalidPathSegment(name: name, value: value)
+        }
         result += "/" + URLCoding.encode(value, spaceAsPlus: false)
       case .wildcard:
         guard let value = params.get("*") else {
           throw RouteMatchError.missingRequiredParameter(name: "*")
         }
-        for part in value.split(separator: "/") {
-          result += "/" + URLCoding.encode(String(part), spaceAsPlus: false)
+        // Each `/`-separated component becomes a segment. An empty component, from a leading,
+        // trailing, or repeated `/`, would collapse, and a dot component would be resolved by
+        // the browser, so the URL would no longer carry this value.
+        if !value.isEmpty {
+          for part in value.split(separator: "/", omittingEmptySubsequences: false) {
+            let component = String(part)
+            guard !component.isEmpty, !RoutePattern.isDotSegment(component) else {
+              throw RouteMatchError.invalidPathSegment(name: "*", value: value)
+            }
+            result += "/" + URLCoding.encode(component, spaceAsPlus: false)
+          }
         }
       }
     }
@@ -162,11 +183,20 @@ struct RoutePattern: Equatable, Sendable {
         seenParams.append(name)
         segments.append(.parameter(name))
       } else {
-        segments.append(.literal(URLCoding.decode(rawSegment, plusIsSpace: false)))
+        let literal = URLCoding.decode(rawSegment, plusIsSpace: false)
+        guard !isDotSegment(literal) else {
+          throw RouteTreeError.dotSegment(path: path)
+        }
+        segments.append(.literal(literal))
       }
     }
 
     return segments
+  }
+
+  /// Returns `true` for a decoded segment that URL parsers resolve as `.` or `..`.
+  static func isDotSegment(_ decodedSegment: String) -> Bool {
+    decodedSegment == "." || decodedSegment == ".."
   }
 
   private static func pathSegments(_ path: String) -> [String] {

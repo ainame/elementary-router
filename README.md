@@ -3,7 +3,8 @@
 `ElementaryRouter` is a URL state router for ElementaryUI on Swift/WASM.
 
 The 0.0.1 API is macro-based. `@Routes` generates a single typed route view,
-route handles, href helpers, and typed router helpers. This keeps
+typed navigation destinations, and route-set-specific router, provider, and
+link views. This keeps
 route rendering on upstream ElementaryUI without a vendored `AnyView` or runtime
 type-erased view layer.
 
@@ -81,8 +82,8 @@ let app = Application(AppRoutes.RouterView())
 app.mount(in: .body)
 ```
 
-If you need programmatic access to generated handles, href helpers, or the router,
-build the route set explicitly and render with that same route set and router:
+If you need programmatic access to the route set or the router, build the route
+set explicitly and render with that same route set and router:
 
 ```swift
 let routes = try AppRoutes.routes()
@@ -91,13 +92,15 @@ let router = routes.router()
 let app = Application(AppRoutes.RouterView(routes, router: router))
 app.mount(in: .body)
 
-try router.navigate(to: routes.handles.profile, params: ["lang": "ja", "profileId": 42])
+try router.navigate(to: routes.profile(lang: "ja", profileId: 42))
 ```
 
-Each `routes()` call registers a new set of route handles. Handles belong to the
-route set that registered them, so a handle from another `@Routes` type, or from
-a separate `routes()` call, is rejected: `href(to:)` and `navigate(to:)` throw
-`RouteMatchError.foreignRoute`, and `isActive` returns `false`.
+Each `routes()` call registers a new set of routes. Destinations and handles
+belong to the route set that registered them, so one from a separate `routes()`
+call is rejected: `href(to:)`, `navigate(to:)`, and `replace(to:)` throw
+`RouteMatchError.foreignRoute`, and `isActive` returns `false`. A destination
+from another `@Routes` type does not compile, because `RouteDestination` is
+generic over that type's generated `RouteView`.
 `AppRoutes.RouterView(routes, router:)` and `AppRoutes.Provider(routes, router:)`
 stop with a precondition failure when the router was not created by
 `routes.router()`.
@@ -111,7 +114,7 @@ struct DocsRoutes { ... }
 let app = Application(DocsRoutes.RouterView())
 ```
 
-In hash mode, `HashRouter.href(to:)`, generated href helpers, and
+In hash mode, `HashRouter.href(to:)`, `DocsRoutes.RouteSet.href(to:)`, and
 `DocsRoutes.Link` produce fragment hrefs such as `#/docs/guide?tab=api#install`.
 The route path and query are encoded once and placed after `#`. Browsers
 resolve a fragment href against the current document URL, so an app served
@@ -136,19 +139,77 @@ static func contentView<Content: View>(outlet: Outlet<Content>) -> ContentView<C
 }
 ```
 
-Generate links with route handles or generated href helpers:
+## Typed Destinations
+
+Every `@Route` gets a destination factory on the generated route set, named
+after the route function and taking its path, wildcard, and query values with
+their declared types:
 
 ```swift
-AppRoutes.Link(
-  to: routes.handles.profile,
-  params: ["lang": "ja", "profileId": 42],
-  query: ["tab": "posts"]
-) {
+let profile = try routes.profile(lang: "ja", profileId: 42, tab: "posts", hash: "bio")
+```
+
+A missing argument, a wrong label, or a value of the wrong type is a compile
+error. The factory returns a `RouteDestination<AppRoutes.RouteView>`, and that
+one value drives links, hrefs, programmatic navigation, and active checks in
+both path and hash mode:
+
+```swift
+AppRoutes.Link(to: profile) {
   "Profile"
 }
 
-let href = try routes.profileHref(lang: "ja", profileId: 42, tab: "posts")
+let href = try routes.href(to: profile)   // "/ja/profile/42?tab=posts#bio"
+try router.navigate(to: profile)
+try router.replace(to: profile)
+let isActive = router.isActive(profile)
 ```
+
+Types alone do not make every URL valid, so building a destination validates
+it and throws `RouteMatchError`:
+
+- `missingRequiredParameter` when a path value is empty, because the segment
+  would collapse
+- `invalidPathSegment` when a path value is `.` or `..`, or a wildcard value
+  has a `.` or `..` component or an empty component from a leading, trailing,
+  or repeated `/`. Browsers resolve or collapse such segments, and percent
+  encoding cannot prevent it because URL parsers also resolve `%2E` forms. The
+  value is rejected in hash mode too, so a destination is valid in both modes
+  or in neither. Dots inside a segment, such as `a.b` or `...`, encoded slashes
+  in path values, and unicode are kept.
+- `invalidValue` when a value encodes to a string that its `RouteValue` type
+  cannot decode again, such as a custom type with an invalid instance
+- `unroutableLocation` when the URL resolves to another route, such as
+  `user(name: "new")` on `/users/:name` next to `/users/new`, or
+  `docs(splat: "")` on `/docs/*` next to `/docs`
+
+Routes without path or wildcard values, whose query values use only `String`,
+`Int`, `Double`, or `Bool`, cannot fail, so their factories do not throw:
+
+```swift
+AppRoutes.Link(to: routes.home()) {
+  "Home"
+}
+```
+
+A defaulted query parameter, such as `tab: Query<String> = Query("overview")`,
+becomes an optional factory argument. Omitting it keeps it out of the URL and
+the route renders its default; passing the default value writes it explicitly.
+
+`router.isActive(destination)` is `true` when the current leaf route and path
+values equal the destination's and every query value the destination wrote is
+present. Pass `includeQuery: false` to ignore the query and `includeHash: true`
+to also compare the fragment. Use `router.isActive(routes.handles.layout,
+options: .descendant)` to check whether a layout encloses the current route.
+
+Layouts never match a location on their own, so they have handles but no
+destination factory.
+
+`RouteHandle` with `RouteValues`, such as `router.navigate(to: handle, params:
+["id": 42])`, remains as a low-level, untyped API for manually built route trees.
+It applies the same validation, including `unroutableLocation` for layout
+handles. `router.navigate(to: RouteLocation(url: "/raw?path"))` is the
+unvalidated escape hatch for raw URLs.
 
 ## Macros
 
@@ -166,15 +227,18 @@ struct AppRoutes {
 The macro generates:
 
 - `AppRoutes.RouteView`: a single typed view union for all route outputs
-- `AppRoutes.Handles`: named route handles
-- `AppRoutes.RouteSet`: the generated handles plus href helpers, and
-  `router()` to create the typed router for the declared routing mode
+- `AppRoutes.Handles`: named low-level route handles, including layouts
+- `AppRoutes.RouteSet`: the generated handles, a typed destination factory for
+  each route, `href(to:)`, and `router()` to create the typed router for the
+  declared routing mode
 - `AppRoutes.Provider`: installs a route set and its router for the content below it
 - `AppRoutes.RouterView`: a typed route boundary that renders the current route,
   either for a route set and router you pass in or for ones it creates itself
-- `AppRoutes.Link`: a typed link view for this route declaration
+- `AppRoutes.Link`: a link view for a destination of this route set
 - `AppRoutes.routes()`: the factory used to build a route set
-- route-specific href helpers, such as `profileHref(...)`
+
+Route names `tree`, `handles`, `router`, and `href`, and route parameters named
+`hash`, are rejected at compile time because they collide with generated API.
 
 Route declarations must be `static func` members inside the `@Routes` struct.
 The macro intentionally does not discover routes from extensions or unrelated
@@ -212,11 +276,11 @@ static func docs(splat: Wildcard) -> DocsPage {
 }
 ```
 
-The generated handle and href helper use the route function name:
+The generated destination factory and handle use the route function name:
 
 ```swift
+try routes.profile(lang: "ja", profileId: 42, tab: "posts")
 routes.handles.profile
-try routes.profileHref(lang: "ja", profileId: 42, tab: "posts")
 ```
 
 ### `@Layout`
@@ -334,6 +398,13 @@ Static segments are compared after percent-decoding, so `@Route("/café")`
 matches both `/café` and `/caf%C3%A9`. Generated hrefs percent-encode static
 segments and parameter values, and parameter values are decoded when matched.
 
+A path containing a `.` or `..` segment, including `%2E` forms, matches no
+route and renders `@NotFound`. In path mode the browser resolves such segments
+before the router sees them; raw `RouteLocation` navigation and hash fragments
+are not resolved, so the router rejects them to behave the same in both modes.
+Route paths cannot declare static dot segments: `@Routes` reports them at
+compile time and `RouteBuilder._build()` throws `RouteTreeError.dotSegment`.
+
 Routes that match exactly the same URLs are rejected. `@Routes` reports them at
 compile time and `RouteBuilder._build()` throws `RouteTreeError`:
 
@@ -344,8 +415,9 @@ compile time and `RouteBuilder._build()` throws `RouteTreeError`:
 - `invalidWildcard` when `*` is not the last path segment
 
 Empty path parameter values throw `RouteMatchError.missingRequiredParameter`
-when an href is built, because the empty segment would collapse and the URL
-would no longer match the route.
+when a destination or href is built, because the empty segment would collapse
+and the URL would no longer match the route. A URL claimed by a route with
+higher precedence throws `RouteMatchError.unroutableLocation`.
 - `@Layout` composes nested route UI through `Outlet<Content>`; keep durable app state above the router view.
 - `@NotFound` and `@RouteError` keep fallback policy on route configuration, not inside page view bodies.
 - `RouteValues` is used for both path params and query params.
@@ -354,23 +426,30 @@ would no longer match the route.
 
 ## Link Interception Status
 
-Generated route-set links such as `AppRoutes.Link` emit a normal anchor with
-`href` and `data-router-link="true"`, then use ElementaryUI's Swift `onClick`
-handler to call router navigation only for
-eligible clicks:
+Generated route-set links such as `AppRoutes.Link` emit a normal anchor whose
+`href` comes from the destination and the route set's mode, so it never depends
+on a router and never falls back to `#`. When the environment provides this
+route set's router and that router accepts the destination, the anchor also
+gets `data-router-link="true"` and ElementaryUI's Swift `onClick` handler calls
+router navigation only for eligible clicks:
 
 - left button
 - no modifier keys
 - no non-self target
 
 Modifier clicks, middle clicks, and `_blank` targets stay native browser
-behavior.
+behavior. Without a provided router, or with a destination from another
+`routes()` call, the link stays a plain anchor and the browser performs a normal
+document navigation to the same href.
 
 `AppRoutes.Provider(routes, router:)` installs a route set and the concrete
 `Router<AppRoutes.RouteView>` or `HashRouter<AppRoutes.RouteView>` created by
 that route set in ElementaryUI's environment. `AppRoutes.RouterView` installs
 its route set and router through the provider, and `AppRoutes.Link(to:)` reads
-the typed router back without existential erasure.
+the typed router back without existential erasure. Views that build
+destinations read the route set from `AppRoutes._routeSetEnvironmentKey`, which
+is `nil` outside a provider; handle that case explicitly instead of trapping in
+a view body.
 
 One blocker remains outside ElementaryRouter: ElementaryUI currently exposes
 mouse button and modifier-key state, but not a public way to call
@@ -419,7 +498,8 @@ In scope for 0.0.1:
 - path params, wildcard params, and typed query params
 - nested typed layouts with `@Layout` and `Outlet<Content>`
 - browser routing, hash routing, and internal test adapters
-- route handles, href helpers, active matching, not-found, and route-error fallback rendering
+- typed destinations for links, hrefs, navigation, and active matching
+- not-found and route-error fallback rendering
 - typed route-set `Provider`, `RouterView`, and `Link` generation
 
 Out of scope for 0.0.1:

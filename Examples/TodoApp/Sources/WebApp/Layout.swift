@@ -3,12 +3,16 @@ import ElementaryUI
 
 @View
 struct FilterLink {
+  @Environment(AppRoutes._routerEnvironmentKey) var router
+
   let title: String
-  let route: RouteHandle
+  let destination: RouteDestination<AppRoutes.RouteView>
 
   var body: some View {
-    AppRoutes.Link(to: route) {
-      title
+    span(.style(filterLinkStyle(isActive: router?.isActive(destination) ?? false))) {
+      AppRoutes.Link(to: destination) {
+        title
+      }
     }
   }
 }

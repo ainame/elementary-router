@@ -94,7 +94,54 @@ public final class Router<RouteContent: View> {
     storage.currentMatch?.params
   }
 
-  /// Builds an href for a registered route handle.
+  /// Returns `true` when this router can navigate to `destination`.
+  ///
+  /// A destination is accepted when this router's route set registered its route and the route
+  /// still resolves its location. Generated links use this to choose client navigation.
+  public func _accepts(_ destination: RouteDestination<RouteContent>) -> Bool {
+    storage.accepts(destination)
+  }
+
+  /// Returns the href for a destination, such as `/users/42?tab=posts`.
+  ///
+  /// Throws `RouteMatchError.foreignRoute` for a destination from another route set.
+  public func href(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) -> String {
+    try storage.href(to: destination)
+  }
+
+  /// Navigates to a destination, pushing a history entry unless `replace` is `true`.
+  ///
+  /// Throws `RouteMatchError.foreignRoute` for a destination from another route set, without
+  /// changing the location.
+  public func navigate(
+    to destination: RouteDestination<RouteContent>,
+    replace: Bool = false
+  ) throws(RouteMatchError) {
+    try storage.navigate(to: destination, replace: replace)
+  }
+
+  /// Replaces the current history entry with a destination.
+  public func replace(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) {
+    try storage.replace(to: destination)
+  }
+
+  /// Returns `true` when the current leaf route and path parameters equal the destination's.
+  ///
+  /// With `includeQuery`, every query value of the destination must also be present in the
+  /// current location; omitted query defaults are not compared. With `includeHash`, the decoded
+  /// fragments must be equal. Use the `RouteHandle` overload with `.descendant` to check
+  /// enclosing layouts.
+  public func isActive(
+    _ destination: RouteDestination<RouteContent>,
+    includeQuery: Bool = true,
+    includeHash: Bool = false
+  ) -> Bool {
+    storage.isActive(destination, includeQuery: includeQuery, includeHash: includeHash)
+  }
+
+  /// Builds an href for a registered route handle and raw values.
+  ///
+  /// This is the untyped, low-level API. Prefer typed destinations from the generated route set.
   public func href(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -198,11 +245,57 @@ public final class HashRouter<RouteContent: View> {
     storage.currentMatch?.params
   }
 
-  /// Builds a fragment href, such as `#/users/42?tab=posts`, for a registered route handle.
+  /// Returns `true` when this router can navigate to `destination`.
+  ///
+  /// A destination is accepted when this router's route set registered its route and the route
+  /// still resolves its location. Generated links use this to choose client navigation.
+  public func _accepts(_ destination: RouteDestination<RouteContent>) -> Bool {
+    storage.accepts(destination)
+  }
+
+  /// Returns the fragment href for a destination, such as `#/users/42?tab=posts`.
   ///
   /// The href resolves against the current document URL, so the app's base path and outer query
   /// string are preserved by normal clicks, modified clicks, and copied links. Do not declare a
   /// document `<base href>` element in hash-mode apps, because it changes that resolution.
+  /// Throws `RouteMatchError.foreignRoute` for a destination from another route set.
+  public func href(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) -> String {
+    try storage.href(to: destination)
+  }
+
+  /// Navigates to a destination, pushing a history entry unless `replace` is `true`.
+  ///
+  /// Throws `RouteMatchError.foreignRoute` for a destination from another route set, without
+  /// changing the location.
+  public func navigate(
+    to destination: RouteDestination<RouteContent>,
+    replace: Bool = false
+  ) throws(RouteMatchError) {
+    try storage.navigate(to: destination, replace: replace)
+  }
+
+  /// Replaces the current history entry with a destination.
+  public func replace(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) {
+    try storage.replace(to: destination)
+  }
+
+  /// Returns `true` when the current leaf route and path parameters equal the destination's.
+  ///
+  /// With `includeQuery`, every query value of the destination must also be present in the
+  /// current location; omitted query defaults are not compared. With `includeHash`, the decoded
+  /// fragments must be equal.
+  public func isActive(
+    _ destination: RouteDestination<RouteContent>,
+    includeQuery: Bool = true,
+    includeHash: Bool = false
+  ) -> Bool {
+    storage.isActive(destination, includeQuery: includeQuery, includeHash: includeHash)
+  }
+
+  /// Builds a fragment href, such as `#/users/42?tab=posts`, for a registered route handle and
+  /// raw values.
+  ///
+  /// This is the untyped, low-level API. Prefer typed destinations from the generated route set.
   public func href(
     to route: RouteHandle,
     params: RouteValues = RouteValues(),
@@ -333,6 +426,51 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     navigate(to: RouteLocation(url: href), replace: replace)
   }
 
+  func accepts(_ destination: RouteDestination<RouteContent>) -> Bool {
+    do throws(RouteMatchError) {
+      try routes._validate(destination)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  func href(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) -> String {
+    try routes._validate(destination)
+    return history.href(for: destination.location)
+  }
+
+  func navigate(
+    to destination: RouteDestination<RouteContent>,
+    replace: Bool = false
+  ) throws(RouteMatchError) {
+    try routes._validate(destination)
+    navigate(to: destination.location, replace: replace)
+  }
+
+  func isActive(
+    _ destination: RouteDestination<RouteContent>,
+    includeQuery: Bool = true,
+    includeHash: Bool = false
+  ) -> Bool {
+    // Handles compare by registration, so a destination from another route set never matches.
+    guard let match = currentMatch, match.route == destination.route,
+      match.params.containsAll(destination.params)
+    else {
+      return false
+    }
+
+    if includeQuery, !QueryString.parse(location.queryString).containsAll(destination.query) {
+      return false
+    }
+
+    if includeHash, destination.hash != URLCoding.decode(location.hash, plusIsSpace: false) {
+      return false
+    }
+
+    return true
+  }
+
   func navigate(to location: RouteLocation, replace: Bool = false) {
     if replace {
       history.replace(location)
@@ -348,6 +486,10 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     hash: String = ""
   ) throws(RouteMatchError) {
     try navigate(to: route, params: params, query: query, hash: hash, replace: true)
+  }
+
+  func replace(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) {
+    try navigate(to: destination, replace: true)
   }
 
   func back() {

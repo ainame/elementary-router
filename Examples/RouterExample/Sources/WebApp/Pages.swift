@@ -32,6 +32,7 @@ struct HomePage {
 struct ProfilePage {
   let lang: String
   let profileID: Int
+  let tab: String
 
   var body: some View {
     section(.style(panelStyle)) {
@@ -41,6 +42,8 @@ struct ProfilePage {
         dd { lang }
         dt { "profileId" }
         dd { "\(profileID)" }
+        dt { "tab" }
+        dd { tab }
       }
     }
   }
