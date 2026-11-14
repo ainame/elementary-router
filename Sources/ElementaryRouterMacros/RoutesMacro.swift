@@ -40,6 +40,10 @@ public enum RoutesMacro: MemberMacro {
       context.diagnose(.init(node: Syntax(modeArgument), message: RoutesDiagnostic.featureMode))
     }
     let mode = isFeature ? .path : parseRoutesMode(from: node, context: context)
+    if isFeature, let basePathArgument = node.basePathArgument {
+      context.diagnose(.init(node: Syntax(basePathArgument), message: RoutesDiagnostic.featureBasePath))
+    }
+    let basePath = isFeature ? "" : parseBasePath(from: node, mode: mode, context: context)
     // Declarations with an error get no generated code, so an invalid signature is reported once,
     // by its diagnostic, instead of again as malformed or mistyped generated Swift.
     let diagnosed = DiagnosedDeclarations(context)
@@ -212,6 +216,7 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: routeSetDeclaration(
           access: access,
           mode: mode,
+          basePath: basePath,
           containerName: containerName,
           hierarchy: hierarchy
         )
@@ -245,6 +250,7 @@ public enum RoutesMacro: MemberMacro {
         stringLiteral: linkDeclaration(
           access: access,
           mode: mode,
+          basePath: basePath,
           containerName: containerName
         )
       ),
@@ -1412,6 +1418,7 @@ private func handlesDeclaration(
 private func routeSetDeclaration(
   access: String,
   mode: RoutesMode,
+  basePath: String,
   containerName: String,
   hierarchy: RouteHierarchy
 ) -> String {
@@ -1426,7 +1433,7 @@ private func routeSetDeclaration(
   }
   .joined(separator: "\n\n")
   let routerType = routerType(mode: mode, routeViewType: "RouteView")
-  let routerInitializer = routerInitializer(mode: mode, treeName: "tree")
+  let routerInitializer = routerInitializer(mode: mode, basePath: basePath, treeName: "tree")
   let mounts = hierarchy.mounts
   let mountProperties = mounts.map { mount in
     """
@@ -1457,7 +1464,7 @@ private func routeSetDeclaration(
 
         \(access)func href(to destination: RouteDestination<RouteView>) throws(RouteMatchError) -> String {
           try tree._validate(destination)
-          return \(destinationHrefExpression(mode: mode, destination: "destination"))
+          return \(destinationHrefExpression(mode: mode, basePath: basePath, destination: "destination"))
         }
 
       \(factories)
@@ -1467,11 +1474,20 @@ private func routeSetDeclaration(
 
 /// The href a generated link or route set uses for `destination` in the declared mode.
 ///
-/// It matches `Router.href(to:)` and `HashRouter.href(to:)`, without needing a router.
-private func destinationHrefExpression(mode: RoutesMode, destination: String) -> String {
+/// It matches `Router.href(to:)` and `HashRouter.href(to:)`, without needing a router. A path
+/// href starts with the normalized base path, which only contains characters that need no
+/// escaping in a string literal.
+private func destinationHrefExpression(
+  mode: RoutesMode,
+  basePath: String,
+  destination: String
+) -> String {
   switch mode {
   case .path:
-    return "\(destination).location.href"
+    if basePath.isEmpty {
+      return "\(destination).location.href"
+    }
+    return "\"\(basePath)\" + \(destination).location.href"
   case .hash:
     return "\"#\" + \(destination).location.href"
   }
@@ -1795,6 +1811,7 @@ private func routerViewDeclaration(
 private func linkDeclaration(
   access: String,
   mode: RoutesMode,
+  basePath: String,
   containerName: String
 ) -> String {
   return """
@@ -1841,7 +1858,7 @@ private func linkDeclaration(
 
         /// The destination href in this route set's mode, which does not depend on a router.
         var href: String {
-          \(destinationHrefExpression(mode: mode, destination: "destination"))
+          \(destinationHrefExpression(mode: mode, basePath: basePath, destination: "destination"))
         }
 
         /// Client navigation needs a provided router that accepts the destination. Otherwise the
@@ -2014,12 +2031,78 @@ private func routerType(mode: RoutesMode, routeViewType: String) -> String {
   }
 }
 
-private func routerInitializer(mode: RoutesMode, treeName: String) -> String {
+private func routerInitializer(mode: RoutesMode, basePath: String, treeName: String) -> String {
   switch mode {
   case .path:
-    return "Router(routes: \(treeName))"
+    if basePath.isEmpty {
+      return "Router(routes: \(treeName))"
+    }
+    return "Router(routes: \(treeName), basePath: \"\(basePath)\")"
   case .hash:
     return "HashRouter(routes: \(treeName))"
+  }
+}
+
+/// Reads and normalizes the `basePath:` argument, returning `""` for no base path.
+///
+/// The value must be a plain string literal. Leading and trailing slashes are optional, and `""`
+/// or `"/"` mean no base path, as `Router(routes:basePath:)` normalizes them. Segments must be
+/// non-empty, must not be `.` or `..`, and may only use URL path characters, so the value is the
+/// percent-encoded prefix the browser reports in `location.pathname`. Hash mode rejects the
+/// argument, because fragment hrefs already resolve against the document URL.
+private func parseBasePath(
+  from node: AttributeSyntax,
+  mode: RoutesMode,
+  context: some MacroExpansionContext
+) -> String {
+  guard let argument = node.basePathArgument else {
+    return ""
+  }
+  if mode == .hash {
+    context.diagnose(.init(node: Syntax(argument), message: RoutesDiagnostic.hashBasePath))
+    return ""
+  }
+  guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
+    let rawValue = literal.representedLiteralValue
+  else {
+    context.diagnose(
+      .init(node: Syntax(argument.expression), message: RoutesDiagnostic.basePathRequiresStringLiteral)
+    )
+    return ""
+  }
+
+  var trimmed = Substring(rawValue)
+  while trimmed.first == "/" {
+    trimmed = trimmed.dropFirst()
+  }
+  while trimmed.last == "/" {
+    trimmed = trimmed.dropLast()
+  }
+  if trimmed.isEmpty {
+    return ""
+  }
+
+  let segments = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+  let isValid = segments.allSatisfy { segment in
+    !segment.isEmpty && segment != "." && segment != ".."
+      && segment.unicodeScalars.allSatisfy(isBasePathCharacter)
+  }
+  guard isValid else {
+    context.diagnose(
+      .init(node: Syntax(argument.expression), message: RoutesDiagnostic.invalidBasePath(path: rawValue))
+    )
+    return ""
+  }
+  return "/" + trimmed
+}
+
+/// RFC 3986 `pchar` characters, with `%` for percent-encoded octets.
+private func isBasePathCharacter(_ scalar: Unicode.Scalar) -> Bool {
+  switch scalar {
+  case "a"..."z", "A"..."Z", "0"..."9":
+    return true
+  default:
+    return "-._~%!$&'()*+,;=:@".unicodeScalars.contains(scalar)
   }
 }
 
@@ -2199,6 +2282,14 @@ extension AttributeSyntax {
     }
     return arguments.first { $0.label?.text == "mode" }
   }
+
+  /// The `basePath:` argument of a `@Routes` attribute, if any.
+  fileprivate var basePathArgument: LabeledExprSyntax? {
+    guard case .argumentList(let arguments) = arguments else {
+      return nil
+    }
+    return arguments.first { $0.label?.text == "basePath" }
+  }
 }
 
 extension WithAttributesSyntax {
@@ -2253,6 +2344,9 @@ private enum RoutesDiagnostic: DiagnosticMessage {
   case duplicateNotFound
   case duplicateRouteError
   case unsupportedRoutesMode
+  case basePathRequiresStringLiteral
+  case invalidBasePath(path: String)
+  case hashBasePath
   case reservedRouteName(name: String)
   case reservedHashParameter
   case dotSegment(segment: String)
@@ -2283,6 +2377,7 @@ private enum RoutesDiagnostic: DiagnosticMessage {
   case queryPathConflict(name: String, owner: String, route: String)
   case featureGenericParameters
   case featureMode
+  case featureBasePath
   case featureFallback
   case featureMount
   case mountRequiresStringLiteral
@@ -2320,6 +2415,12 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "`@Routes` can only declare one `@RouteError` function."
     case .unsupportedRoutesMode:
       "`@Routes(mode:)` only supports `.path` and `.hash`."
+    case .basePathRequiresStringLiteral:
+      "`@Routes(basePath:)` requires a string literal, such as `\"/my-app\"`."
+    case .invalidBasePath(let path):
+      "Base path `\(path)` must be URL path segments, such as `/my-app` or `/docs/v2`, without empty, `.`, or `..` segments, query, fragment, or characters that need percent-encoding."
+    case .hashBasePath:
+      "`basePath` only applies to path mode; hash-mode hrefs are fragments that already resolve against the document URL, so remove `basePath`."
     case .reservedRouteName(let name):
       "Route name `\(name)` is reserved by the generated `RouteSet`."
     case .reservedHashParameter:
@@ -2356,6 +2457,8 @@ private enum RoutesDiagnostic: DiagnosticMessage {
       "A feature `@Routes` struct must declare exactly one generic parameter for the host route view, such as `<Root: View>`."
     case .featureMode:
       "Features cannot choose a routing mode; the host `@Routes` that mounts the feature owns it."
+    case .featureBasePath:
+      "Features cannot declare a base path; the host `@Routes` that mounts the feature owns it."
     case .featureFallback:
       "Features cannot declare `@NotFound` or `@RouteError`; the host `@Routes` that mounts the feature owns fallback policy."
     case .featureMount:

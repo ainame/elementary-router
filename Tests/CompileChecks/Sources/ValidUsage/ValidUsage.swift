@@ -64,3 +64,23 @@ public func useTypedDestinations(
     blogRouter.isActive(post, includeQuery: false, includeHash: true) ? "active" : "inactive",
   ]
 }
+
+/// A public path-mode route set served under a sub-path, such as GitHub Pages' `/<repository>/`.
+@Routes(basePath: "/my-app")
+public struct SubPathRoutes {
+  @Route("/")
+  public static func home() -> EmptyHTML {
+    EmptyHTML()
+  }
+}
+
+@View
+struct SubPathApp {
+  var body: some View {
+    SubPathRoutes.RouterView()
+  }
+}
+
+public func subPathRouter(_ routes: SubPathRoutes.RouteSet) -> Router<SubPathRoutes.RouteView> {
+  routes.router()
+}

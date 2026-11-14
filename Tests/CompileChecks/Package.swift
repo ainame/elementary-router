@@ -45,6 +45,7 @@ let package = Package(
     .target(name: "RejectsFeatureRouteSetOfAnotherHost", dependencies: composedDependencies),
     .target(name: "RejectsMountWithForeignRoot", dependencies: composedDependencies),
     .target(name: "RejectsRouteInsideMount", dependencies: composedDependencies),
+    .target(name: "RejectsHashBasePath", dependencies: routerDependencies),
   ],
   swiftLanguageModes: [.v6]
 )

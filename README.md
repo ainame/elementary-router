@@ -130,6 +130,63 @@ normal clicks, modified clicks, and copied links, and client navigation keeps
 the same base path and outer query string. Do not add a `<base href>` element
 to hash-mode pages, because it changes how fragment hrefs resolve.
 
+### Serving under a base path
+
+An app served from a sub-path, such as GitHub Pages' `https://<user>.github.io/<repository>/`,
+can keep clean path URLs by declaring the sub-path once:
+
+```swift
+@Routes(basePath: "/SpeedMath")
+struct AppRoutes {
+  @Route("/")
+  static func home() -> HomePage { HomePage() }
+
+  @Route("/users/:id")
+  static func user(id: Int) -> UserPage { UserPage(id: id) }
+}
+```
+
+Routes stay declared from `/`. The router strips the base path before matching,
+so `/SpeedMath/` and `/SpeedMath` match `/`, and `/SpeedMath/users/42` matches
+`/users/42`. `router.location` is the location below the base path. A document
+path outside the base path, such as `/users/42` or `/SpeedMathOld/`, matches no
+route and renders `@NotFound`; its `RouteNotFoundContext.location` is the full
+document location.
+
+Every href and history entry gets the prefix: `routes.href(to:)`,
+`router.href(to:)`, `AppRoutes.Link`, `RouteLink` in mounted features, and
+`navigate(to:)` / `replace(to:)` all produce `/SpeedMath/users/42`, and the root
+route is `/SpeedMath/`. Destinations themselves stay base-relative
+(`destination.location.href == "/users/42"`), so mounted features need no
+changes: their destinations are host destinations and get the host's prefix.
+
+The base path is a string literal of URL path segments. Leading and trailing
+slashes are optional, so `"SpeedMath/"` is the same as `"/SpeedMath"`, and `""`
+or `"/"` mean no base path. It is compared byte for byte, case-sensitively, with
+the percent-encoded `location.pathname`, so write non-ASCII segments
+percent-encoded; empty, `.`, and `..` segments, queries, and fragments are
+rejected at compile time. `Router(routes:basePath:)` applies the same
+normalization when you create a router yourself.
+
+`basePath` applies to path mode only. `@Routes(mode: .hash, basePath:)` is a
+compile-time error, because hash-mode hrefs are fragments that already resolve
+against the document URL, base path included.
+
+Deploying a base-path app as static files still needs two things outside the
+router:
+
+- Build assets for the sub-path, for example Vite's `base: "/SpeedMath/"`, so
+  the WebAssembly module and scripts load from deep URLs.
+- A single-page-app fallback for deep links. GitHub Pages serves `404.html` for
+  any path it has no file for, so copy the built `index.html` to `404.html`;
+  a reload or shared link to `/SpeedMath/users/42` then boots the app, and the
+  router matches the path. The response status is still 404. Use hash mode when
+  that is not acceptable.
+
+The Link interception workaround below works unchanged: prefixed hrefs are
+same-origin, so the capture-phase script cancels the document navigation and
+the router pushes the prefixed entry.
+
 The generated router view creates the concrete router and renders the current route:
 
 ```swift
@@ -450,6 +507,11 @@ The macro generates:
 - `AppRoutes.Link`: a link view for a destination of this route set
 - `AppRoutes.routes()`: the factory used to build a route set
 
+`@Routes(mode:basePath:)` takes the routing mode, `.path` by default or `.hash`,
+and, for path mode, the base path the app is served under; see
+[Serving under a base path](#serving-under-a-base-path). Features take neither:
+the host that mounts them owns both.
+
 Route names `tree`, `handles`, `router`, and `href`, and route parameters named
 `hash`, are rejected at compile time because they collide with generated API.
 
@@ -634,7 +696,7 @@ an invalid `Int` path parameter.
 
 - `Router.matchedRoutes` is the parent-to-leaf match stack, including every enclosing layout.
 - `Router.currentRoute` and `Router.currentParams` are leaf conveniences.
-- `Router` uses standard browser path routing.
+- `Router` uses standard browser path routing, optionally below a base path declared with `@Routes(basePath:)`.
 - `HashRouter` is available when you explicitly want hash-based routing; its hrefs are fragments like `#/users/42`.
 - Route handles belong to the route set that registered them; see the identity rules above.
   `RouteBuilder._build()` throws `RouteTreeError.foreignParent` when a route names a
@@ -758,7 +820,7 @@ In scope for 0.0.1:
 - typed route registration with `@Routes`
 - path params, wildcard params, and typed query params
 - nested typed layouts with `@Layout` and `Outlet<Content>`
-- browser routing, hash routing, and internal test adapters
+- browser routing, optionally below a base path, hash routing, and internal test adapters
 - typed destinations for links, hrefs, navigation, and active matching
 - not-found and route-error fallback rendering
 - typed route-set `Provider`, `RouterView`, and `Link` generation

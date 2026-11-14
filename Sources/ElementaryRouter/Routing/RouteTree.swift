@@ -187,24 +187,37 @@ public struct RouteTree<RouteContent: View> {
     try "#" + _href(to: route, params: params, query: query, hash: hash)
   }
 
+  /// The not-found resolution of `location`, which no route of this tree matches.
+  func _notFound(_ location: RouteLocation) -> Resolution {
+    .notFound(
+      RouteNotFoundContext(
+        location: location,
+        query: QueryString.parse(location.queryString)
+      )
+    )
+  }
+
+  /// Renders the `@NotFound` fallback for `location`, which no route of this tree matches.
+  func _renderNotFound(_ location: RouteLocation) throws(RouterRenderError) -> RouteContent {
+    guard let notFoundRenderer else {
+      throw RouterRenderError.routeNotFound
+    }
+    return notFoundRenderer(
+      RouteNotFoundContext(
+        location: location,
+        query: QueryString.parse(location.queryString)
+      )
+    )
+  }
+
   func _resolve(_ location: RouteLocation) -> Resolution {
     guard let record = findLeafRecord(for: location) else {
-      return .notFound(
-        RouteNotFoundContext(
-          location: location,
-          query: QueryString.parse(location.queryString)
-        )
-      )
+      return _notFound(location)
     }
 
     let matches = matchStack(for: record, location: location)
     guard !matches.isEmpty else {
-      return .notFound(
-        RouteNotFoundContext(
-          location: location,
-          query: QueryString.parse(location.queryString)
-        )
-      )
+      return _notFound(location)
     }
 
     let contexts = routeContexts(for: matches, location: location)
@@ -218,26 +231,12 @@ public struct RouteTree<RouteContent: View> {
 
   func _render(_ location: RouteLocation) throws(RouterRenderError) -> RouteContent {
     guard let record = findLeafRecord(for: location) else {
-      let context = RouteNotFoundContext(
-        location: location,
-        query: QueryString.parse(location.queryString)
-      )
-      guard let notFoundRenderer else {
-        throw RouterRenderError.routeNotFound
-      }
-      return notFoundRenderer(context)
+      return try _renderNotFound(location)
     }
 
     let matches = matchStack(for: record, location: location)
     guard !matches.isEmpty else {
-      let context = RouteNotFoundContext(
-        location: location,
-        query: QueryString.parse(location.queryString)
-      )
-      guard let notFoundRenderer else {
-        throw RouterRenderError.routeNotFound
-      }
-      return notFoundRenderer(context)
+      return try _renderNotFound(location)
     }
 
     let contexts = routeContexts(for: matches, location: location)

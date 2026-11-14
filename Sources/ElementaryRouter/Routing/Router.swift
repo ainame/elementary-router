@@ -5,15 +5,42 @@ import Reactivity
 final class RouterState {
   var location: RouteLocation
   var matches: [RouteMatch]
+  /// `true` when the document location is outside the router's base path. `location` is then
+  /// the document location, and no route matches it.
+  var isOutsideBasePath: Bool
 
-  init(location: RouteLocation, matches: [RouteMatch]) {
+  init(location: RouteLocation, matches: [RouteMatch], isOutsideBasePath: Bool) {
     self.location = location
     self.matches = matches
+    self.isOutsideBasePath = isOutsideBasePath
   }
 
-  func apply(location: RouteLocation, matches: [RouteMatch]) {
-    self.location = location
-    self.matches = matches
+  convenience init<RouteContent: View>(
+    document: RouteLocation,
+    routes: RouteTree<RouteContent>,
+    basePath: BasePath
+  ) {
+    if let location = basePath.routeLocation(in: document) {
+      self.init(location: location, matches: routes._matches(location), isOutsideBasePath: false)
+    } else {
+      self.init(location: document, matches: [], isOutsideBasePath: true)
+    }
+  }
+
+  func apply<RouteContent: View>(
+    document: RouteLocation,
+    routes: RouteTree<RouteContent>,
+    basePath: BasePath
+  ) {
+    if let location = basePath.routeLocation(in: document) {
+      self.location = location
+      self.matches = routes._matches(location)
+      self.isOutsideBasePath = false
+    } else {
+      self.location = document
+      self.matches = []
+      self.isOutsideBasePath = true
+    }
   }
 }
 
@@ -60,17 +87,29 @@ public final class Router<RouteContent: View> {
   /// mounted features. Generated providers install it in the environment.
   public let navigator: RouteNavigator<RouteContent>
 
-  /// Creates a path router for the given compiled route tree.
+  /// Creates a path router for the given compiled route tree, served under `basePath`.
+  ///
+  /// Generated route sets pass the `basePath` declared by `@Routes(basePath:)`. Leading and
+  /// trailing slashes are optional, and `""` or `"/"` mean the app is served from the origin
+  /// root. With a base path such as `/SpeedMath`, the document path `/SpeedMath/users/42`
+  /// matches the route `/users/42`, hrefs and history entries get the prefix, and a document
+  /// path outside the base path renders the `@NotFound` fallback.
   ///
   /// The router observes browser history until it and its navigator are released.
-  public convenience init(routes: RouteTree<RouteContent>) {
-    self.init(routes: routes, history: BrowserHistory())
+  public convenience init(routes: RouteTree<RouteContent>, basePath: String = "") {
+    self.init(routes: routes, history: BrowserHistory(), basePath: basePath)
   }
 
-  init(routes: RouteTree<RouteContent>, history: BrowserHistory) {
-    let storage = HistoryRouter(routes: routes, history: history)
+  init(routes: RouteTree<RouteContent>, history: BrowserHistory, basePath: String = "") {
+    let storage = HistoryRouter(routes: routes, history: history, basePath: BasePath(basePath))
     self.storage = storage
     self.navigator = RouteNavigator(storage: .path(storage))
+  }
+
+  /// The normalized base path, such as `/SpeedMath`, or `""` when the app is served from the
+  /// origin root.
+  public var basePath: String {
+    storage.basePath.value
   }
 
   /// Returns `true` when this router resolves exactly the compiled tree `routes`.
@@ -80,7 +119,10 @@ public final class Router<RouteContent: View> {
     storage.routes._isSameTree(as: routes)
   }
 
-  /// The current browser location.
+  /// The current route location, relative to the base path.
+  ///
+  /// When the document location is outside the base path, this is the document location and no
+  /// route matches.
   public var location: RouteLocation {
     storage.location
   }
@@ -108,7 +150,8 @@ public final class Router<RouteContent: View> {
     storage.accepts(destination)
   }
 
-  /// Returns the href for a destination, such as `/users/42?tab=posts`.
+  /// Returns the href for a destination, such as `/users/42?tab=posts`, prefixed with the base
+  /// path, such as `/SpeedMath/users/42?tab=posts`.
   ///
   /// Throws `RouteMatchError.foreignRoute` for a destination from another route set.
   public func href(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) -> String {
@@ -168,7 +211,7 @@ public final class Router<RouteContent: View> {
     try storage.navigate(to: route, params: params, query: query, hash: hash, replace: replace)
   }
 
-  /// Navigates directly to a raw browser location.
+  /// Navigates directly to a route location, which is relative to the base path.
   public func navigate(to location: RouteLocation, replace: Bool = false) {
     storage.navigate(to: location, replace: replace)
   }
@@ -371,13 +414,16 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   typealias ActiveMatchOptions = Router<RouteContent>.ActiveMatchOptions
 
   let routes: RouteTree<RouteContent>
+  /// The document path prefix of path-mode routers; hash-mode routers have none.
+  let basePath: BasePath
   private let state: RouterState
   private let history: History
   private let subscription: HistorySubscription
 
-  init(routes: RouteTree<RouteContent>, history: History) {
-    let state = RouterState(location: history.location, matches: routes._matches(history.location))
+  init(routes: RouteTree<RouteContent>, history: History, basePath: BasePath = .none) {
+    let state = RouterState(document: history.location, routes: routes, basePath: basePath)
     self.routes = routes
+    self.basePath = basePath
     self.history = history
     self.state = state
 
@@ -385,7 +431,7 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     // traversal is applied once. The listener captures the tree and state but not the router,
     // so the history never keeps the router alive.
     self.subscription = history.listen { update in
-      state.apply(location: update.location, matches: routes._matches(update.location))
+      state.apply(document: update.location, routes: routes, basePath: basePath)
     }
   }
 
@@ -424,7 +470,7 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
     hash: String = ""
   ) throws(RouteMatchError) -> String {
     let path = try routes._href(to: route, params: params, query: query, hash: hash)
-    return history.href(for: RouteLocation(url: path))
+    return history.href(for: basePath.documentLocation(for: RouteLocation(url: path)))
   }
 
   func navigate(
@@ -449,7 +495,14 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
 
   func href(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) -> String {
     try routes._validate(destination)
-    return history.href(for: destination.location)
+    return linkHref(for: destination)
+  }
+
+  /// The anchor href of `destination`, without validating it.
+  ///
+  /// It equals `href(to:)` for every accepted destination, as the generated links' hrefs do.
+  func linkHref(for destination: RouteDestination<RouteContent>) -> String {
+    history.href(for: basePath.documentLocation(for: destination.location))
   }
 
   func navigate(
@@ -484,10 +537,11 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   }
 
   func navigate(to location: RouteLocation, replace: Bool = false) {
+    let document = basePath.documentLocation(for: location)
     if replace {
-      history.replace(location)
+      history.replace(document)
     } else {
-      history.push(location)
+      history.push(document)
     }
   }
 
@@ -548,11 +602,17 @@ final class HistoryRouter<RouteContent: View, History: RouterHistory> {
   }
 
   func resolveCurrentRoute() -> RouteTree<RouteContent>.Resolution {
-    routes._resolve(location)
+    if state.isOutsideBasePath {
+      return routes._notFound(location)
+    }
+    return routes._resolve(location)
   }
 
   func renderCurrentRoute() throws(RouterRenderError) -> RouteContent {
-    try routes._render(location)
+    if state.isOutsideBasePath {
+      return try routes._renderNotFound(location)
+    }
+    return try routes._render(location)
   }
 }
 

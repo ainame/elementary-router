@@ -47,7 +47,7 @@ public final class RouteNavigator<RouteContent: View>: _RouteEnvironmentObject {
   }
 
   /// Returns the href for a destination in the router's mode, such as `/shop/products/7` or
-  /// `#/shop/products/7`.
+  /// `#/shop/products/7`, including a path-mode router's base path.
   public func href(to destination: RouteDestination<RouteContent>) throws(RouteMatchError) -> String {
     switch storage {
     case .path(let router): try router.href(to: destination)
@@ -111,8 +111,8 @@ public final class RouteNavigator<RouteContent: View>: _RouteEnvironmentObject {
   /// It equals `href(to:)` for every accepted destination, as the generated links' hrefs do.
   func linkHref(for destination: RouteDestination<RouteContent>) -> String {
     switch storage {
-    case .path: destination.location.href
-    case .hash: "#" + destination.location.href
+    case .path(let router): router.linkHref(for: destination)
+    case .hash(let router): router.linkHref(for: destination)
     }
   }
 }

@@ -1379,6 +1379,90 @@ final class RoutesMacroTests: XCTestCase {
       indentationWidth: .spaces(2)
     )
   }
+
+  func testRoutesMacroPrefixesPathModeHrefsWithNormalizedBasePath() throws {
+    let expansion = try expandRoutes(
+      """
+      @Routes(basePath: "my-app/")
+      struct AppRoutes {
+        @Route("/")
+        static func home() -> HomePage {
+          HomePage()
+        }
+      }
+      """
+    )
+
+    XCTAssertEqual(expansion.diagnostics, [])
+    let source = expansion.source
+    XCTAssertTrue(source.contains("Router(routes: tree, basePath: \"/my-app\")"), source)
+    XCTAssertEqual(source.components(separatedBy: "\"/my-app\" + destination.location.href").count - 1, 2, source)
+
+    // `/` means no base path, so the generated code is the same as without the argument.
+    let root = try expandRoutes(
+      """
+      @Routes(basePath: "/")
+      struct AppRoutes {
+        @Route("/")
+        static func home() -> HomePage {
+          HomePage()
+        }
+      }
+      """
+    )
+    XCTAssertEqual(root.diagnostics, [])
+    XCTAssertTrue(root.source.contains("Router(routes: tree)\n"), root.source)
+    XCTAssertFalse(root.source.contains("basePath"), root.source)
+  }
+
+  func testRoutesMacroRejectsInvalidBasePaths() throws {
+    func diagnostics(_ attribute: String, generic: String = "") throws -> [String] {
+      try expandRoutes(
+        """
+        \(attribute)
+        struct AppRoutes\(generic) {
+          @Route("/")
+          static func home() -> HomePage {
+            HomePage()
+          }
+        }
+        """
+      ).diagnostics
+    }
+
+    XCTAssertEqual(
+      try diagnostics(#"@Routes(mode: .hash, basePath: "/my-app")"#),
+      [
+        "`basePath` only applies to path mode; hash-mode hrefs are fragments that already resolve against the document URL, so remove `basePath`."
+      ]
+    )
+    XCTAssertEqual(
+      try diagnostics(#"@Routes(basePath: "/my-app", mode: .hash)"#).count,
+      1
+    )
+    XCTAssertEqual(
+      try diagnostics(#"@Routes(basePath: base)"#),
+      ["`@Routes(basePath:)` requires a string literal, such as `\"/my-app\"`."]
+    )
+    XCTAssertEqual(
+      try diagnostics(#"@Routes(basePath: "/\(name)")"#),
+      ["`@Routes(basePath:)` requires a string literal, such as `\"/my-app\"`."]
+    )
+    for invalid in ["/a//b", "/a/../b", "/./a", "/my app", "/app?x=1", "/app#top", "/caf\u{e9}"] {
+      XCTAssertEqual(
+        try diagnostics("@Routes(basePath: \"\(invalid)\")"),
+        [
+          "Base path `\(invalid)` must be URL path segments, such as `/my-app` or `/docs/v2`, without empty, `.`, or `..` segments, query, fragment, or characters that need percent-encoding."
+        ],
+        invalid
+      )
+    }
+    XCTAssertEqual(try diagnostics(#"@Routes(basePath: "/docs/v2.1/~me/%E2%9C%93")"#), [])
+    XCTAssertEqual(
+      try diagnostics(#"@Routes(basePath: "/my-app")"#, generic: "<Root: View>"),
+      ["Features cannot declare a base path; the host `@Routes` that mounts the feature owns it."]
+    )
+  }
 }
 
 private struct RoutesExpansion {
